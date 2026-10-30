@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'eg.hesabaty.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'eg.hesabaty.app'
+        minSdk 23
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    signingConfigs {
+        hesabaty {
+            storeFile file('hesabaty.p12')
+            storeType 'pkcs12'
+            storePassword 'hesabaty'
+            keyAlias 'hesabaty'
+            keyPassword 'hesabaty'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.hesabaty
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}

@@ -121,7 +121,7 @@ function gateAuth(){
     +'<div class="field"><label for="gEmail">الإيميل</label><input type="text" id="gEmail" dir="ltr" inputmode="email" autocomplete="username" value="'+esc(G.email)+'" data-in="gEmail"></div>'
     +'<div class="field"><label for="gPass">كلمة السر</label><input type="password" id="gPass" dir="ltr" autocomplete="current-password" value="'+esc(G.pass)+'" data-in="gPass"></div>'
     +'<div class="btns"><button class="btn primary" data-act="gLogin"'+(G.busy?' disabled':'')+'>دخول</button><button class="btn" data-act="gSignup"'+(G.busy?' disabled':'')+'>حساب جديد</button></div>'
-    +'<div class="btns" style="margin-top:10px"><button class="btn" data-act="gGoogle"'+(G.busy?' disabled':'')+'>الدخول بحساب جوجل</button></div>'
+    +(window.AndroidBridge?'':'<div class="btns" style="margin-top:10px"><button class="btn" data-act="gGoogle"'+(G.busy?' disabled':'')+'>الدخول بحساب جوجل</button></div>')
     +'<div style="text-align:center;margin-top:10px"><button class="link" data-act="gReset">نسيت كلمة السر</button></div></div>');
 }
 const AUTH_ERR={
@@ -168,7 +168,7 @@ function touch(o){
 function ready(){
   if(!(metaReady&&txReady))return;
   loaded=true;gate('');render();
-  if(!shareDone){shareDone=true;handleShare()}
+  if(!shareDone){shareDone=true;handleShare();try{autoSync()}catch(e){}}
 }
 function handleShare(){
   try{
@@ -361,6 +361,7 @@ function vMore(){
   });
   h+='</div><div class="btns">'+btn('newAcc','+ حساب جديد')+'</div>';
   h+='<div class="sec"><h2>حسابك</h2></div><div class="card"><div class="kv"><span>داخل بـ</span><b class="num">'+esc(userEmail||'')+'</b></div><p style="margin:8px 0 0;color:var(--muted);font-size:14px">بياناتك محفوظة في قاعدة بيانات Firebase على حسابك، وبتتزامن بين كل أجهزتك وبتشتغل من غير نت.</p><div class="btns" style="margin-top:8px">'+btn('signOut','تسجيل خروج')+'</div></div>';
+  h+=androidCard();
   h+='<div class="sec"><h2>الأرقام المحفوظة</h2></div>';
   const cs=S.meta.contacts||[];
   h+=cs.length?'<div class="list">'+cs.map((c,i)=>'<div class="row"><div class="mid"><div class="t1">'+esc(c.n)+'</div><div class="t2 num">'+esc(c.p)+'</div></div><button class="link" data-act="delContact" data-i="'+i+'">مسح</button></div>').join('')+'</div>':'<div class="empty" style="padding:10px">الأرقام اللي تحوّل لها بتتحفظ هنا.</div>';
@@ -375,6 +376,7 @@ function render(){
   if(!loaded)return;
   $('#today').textContent=new Date().toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long'});
   document.querySelectorAll('.nav .tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
+  const bd=$('#smsBdg');if(bd){const n=(ui.sms&&ui.sms.auto&&ui.sms.auto.items.length)||0;bd.hidden=!n;bd.textContent=n}
   const views={home:vHome,log:vLog,people:vPeople,sms:vSms,more:vMore};
   const y=window.scrollY;
   $('#view').innerHTML=views[ui.tab]();
@@ -685,7 +687,7 @@ function guessAcc(m){
   if(/بنك|bank|cib|nbe|الأهلي|الاهلي|qnb|hsbc|banque|بطاقة|card|visa|mastercard|meeza|ميزة|instapay|انستا/i.test(m)){const b=L.find(a=>a.kind==='bank');if(b)return b.id}
   return L[0]?L[0].id:null;
 }
-function parseMsg(raw){
+function parseMsg(raw,dateMs){
   const m=normDigits(raw).replace(/\s+/g,' ').trim();
   const am=findAmounts(m);let amt=null,bal=null;
   const a=am.filter(x=>!x.bal)[0],b=am.filter(x=>x.bal)[0];
@@ -706,7 +708,7 @@ function parseMsg(raw){
   let who=null;const pm=m.match(/(?:^|\D)(01[0125]\d{8})(?!\d)/);
   if(pm)who=pm[1];
   else{const r=m.match(/(?:\bat\b|عند|لدى)\s+([^.,،:\d]{3,28}?)(?=\s+(?:بتاريخ|on|في|بمبلغ|رصيد|Ref)|[.,،]|$)/i);if(r)who=r[1].trim()}
-  let t=Date.now();
+  let t=dateMs||Date.now();
   const dm=m.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
   if(dm){
     let y=+dm[3];if(y<100)y+=2000;
@@ -726,27 +728,32 @@ function runSmsParse(){
   });
   ui.sms.items=items;ui.sms.skipped=skipped;ui.sms.report=null;render();
 }
-function smsItemHtml(it,i){
-  const T=TYPES[it.type],accs=liveAccs();
-  const sel=(id,val,act)=>'<select data-in="'+act+'" data-i="'+i+'" id="'+act+i+'">'+accs.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===val?' selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select>';
+function smsItemHtml(it,i,auto){
+  const T=TYPES[it.type],accs=liveAccs(),AU=auto?' data-auto="1"':'';
+  const sel=(id,val,act)=>'<select data-in="'+act+'" data-i="'+i+'"'+AU+' id="'+act+i+'">'+accs.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===val?' selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select>';
   const dirTxt=it.dir==='in'?'داخل':(it.dir==='out'?'خارج':'مش متأكد من الاتجاه');
-  let h='<div class="sms"><label class="chk"><input type="checkbox" data-in="smsOn" data-i="'+i+'"'+(it.on?' checked':'')+'><span>'+N(fmt(it.amt))+' ج.م · '+dirTxt+'</span></label>'
+  let h='<div class="sms"><label class="chk"><input type="checkbox" data-in="smsOn" data-i="'+i+'"'+AU+''+(it.on?' checked':'')+'><span>'+N(fmt(it.amt))+' ج.م · '+dirTxt+'</span></label>'
     +(it.dup?'<div class="warn">الرسالة دي اتضافت قبل كده، فمش متعلّمة.</div>':'')
     +(it.dir==null?'<div class="warn">اختار النوع الصح بنفسك.</div>':'')
-    +'<div class="src">'+esc(it.raw)+'</div><div class="grid">'
-    +'<div class="field" style="margin-block:4px"><label for="smsType'+i+'">النوع</label><select data-in="smsType" data-i="'+i+'" id="smsType'+i+'">'
+    +'<div class="src">'+esc(it.raw)+'</div>'
+    +'<div class="lbl2">'+(it.dir==='in'?'الفلوس دي جت منين؟':'الفلوس دي راحت فين؟')+'</div><div class="chips" style="margin:6px 0 8px">'
+    +(it.dir==='in'?[['inc','دخل'],['repay_in','سدّد لي شخص'],['borrow','استلفت'],['xfer','من حساب تاني']]:[['exp','مصروف'],['lend','سلّفت شخص'],['repay_out','سدّدت لشخص'],['xfer','لحساب تاني']]).map(q=>'<button class="chip sm'+(it.type===q[0]?' on':'')+'" data-act="smsQuick" data-t="'+q[0]+'" data-i="'+i+'"'+AU+'>'+q[1]+'</button>').join('')+'</div><div class="grid">'
+    +'<div class="field" style="margin-block:4px"><label for="smsType'+i+'">النوع</label><select data-in="smsType" data-i="'+i+'"'+AU+' id="smsType'+i+'">'
     +ENTRY_ORDER.map(t=>'<option value="'+t+'"'+(it.type===t?' selected':'')+'>'+esc(TYPES[t].long)+'</option>').join('')+'</select></div>'
     +'<div class="field" style="margin-block:4px"><label for="smsAcc'+i+'">'+(T.from&&T.to?'من':'الحساب')+'</label>'+sel('smsAcc'+i,it.acc,'smsAcc')+'</div></div>';
   if(T.from&&T.to)h+='<div class="field" style="margin-block:4px"><label for="smsAcc2'+i+'">إلى</label>'+sel('smsAcc2'+i,it.acc2,'smsAcc2')+'</div>';
-  if(T.person)h+='<div class="field" style="margin-block:4px"><label for="smsPerson'+i+'">الاسم</label><input type="text" id="smsPerson'+i+'" data-in="smsPerson" data-i="'+i+'" value="'+esc(it.person)+'"></div>';
-  h+='<div class="field" style="margin-block:4px"><label for="smsNote'+i+'">ملاحظة</label><input type="text" id="smsNote'+i+'" data-in="smsNote" data-i="'+i+'" value="'+esc(it.note)+'"></div>';
+  if(T.person)h+='<div class="field" style="margin-block:4px"><label for="smsPerson'+i+'">الاسم</label><input type="text" id="smsPerson'+i+'" data-in="smsPerson" data-i="'+i+'"'+AU+' value="'+esc(it.person)+'"></div>';
+  h+='<div class="field" style="margin-block:4px"><label for="smsNote'+i+'">ملاحظة</label><input type="text" id="smsNote'+i+'" data-in="smsNote" data-i="'+i+'"'+AU+' value="'+esc(it.note)+'"></div>';
   if(it.bal!=null)h+='<div class="lbl2">الرصيد المكتوب في الرسالة: '+N(fmt(it.bal))+' ج.م</div>';
+  if(auto)h+='<div style="margin-top:6px"><button class="link" data-act="smsSkip" data-i="'+i+'">تجاهل الرسالة دي</button></div>';
   return h+'</div>';
 }
 function vSms(){
   const s=ui.sms;
   let h='<div class="sec"><h2>رسائل البنك وفودافون كاش</h2></div>'
     +'<div class="card" style="font-size:14px;color:var(--muted);margin-bottom:10px">التطبيق ما بيقراش رسايل التليفون لوحده. انسخ الرسائل من تطبيق الرسائل واضغط لصق من النسخ، أو لو تطبيق الرسائل عندك فيه مشاركة اختار منه دفتر حساباتي (سطر فاضي بين كل رسالة)، وأنا أقسمها وأقترح كل حركة تتسجّل في أنهي حساب. إنت اللي بتراجع وتأكّد قبل ما تتضاف.</div>';
+  h+=autoHtml();
+  if(smsAvailable())h+='<div class="sec"><h2>أو الصق رسائل بنفسك</h2></div>';
   if(s.report)h+='<div class="card" style="margin-bottom:10px;border-color:var(--accent)"><b>'+esc(s.report.title)+'</b>'+s.report.lines.map(l=>'<div class="warn" style="margin-top:6px">'+l+'</div>').join('')+'</div>';
   h+='<textarea id="smsText" data-in="smsText" placeholder="الصق الرسائل هنا">'+esc(s.text)+'</textarea><div class="btns">'+btn('smsParse','حلّل الرسائل','primary')+btn('smsPaste','لصق من النسخ')+'</div>';
   if(s.items){
@@ -758,8 +765,8 @@ function vSms(){
   h+=reconHtml();
   return h;
 }
-function addSmsItems(){
-  const its=ui.sms.items.filter(it=>it.on);
+function addSmsItems(auto){
+  const its=(auto?ui.sms.auto.items:ui.sms.items).filter(it=>it.on);
   if(!its.length){toast('مفيش حاجة معلّم عليها');return}
   for(let i=0;i<its.length;i++){
     const it=its[i],T=TYPES[it.type];
@@ -770,9 +777,9 @@ function addSmsItems(){
   its.forEach(it=>{
     const T=TYPES[it.type];
     const x={id:gid(),t:it.t,type:it.type,amt:it.amt,from:T.from?it.acc:null,to:T.to?(T.from?it.acc2:it.acc):null,
-      person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms'};
+      person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms',sms:it.h};
     S.tx.push(x);months.push(x.t);
-    S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-600);
+    S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-2000);
     if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{};if(!sb[it.acc]||sb[it.acc].t<=it.t)sb[it.acc]={v:it.bal,t:it.t}}
     if(it.bal!=null&&(!lastBal[it.acc]||lastBal[it.acc].t<=it.t))lastBal[it.acc]={t:it.t,v:it.bal};
   });
@@ -782,12 +789,14 @@ function addSmsItems(){
     const d=Math.round((lastBal[id].v-b[id])*100)/100;
     if(Math.abs(d)>=0.5)lines.push('رصيد '+esc(accName(id))+' في آخر رسالة '+N(fmt(lastBal[id].v))+' وفي الدفتر '+N(fmt(b[id]))+' (فرق '+N(fmt(Math.abs(d)))+'). <button class="link" data-act="openAcc" data-id="'+esc(id)+'">افتح الحساب وظبّطه</button>');
   });
-  ui.sms={text:'',items:null,report:{title:'اتضافت '+its.length+' حركة',lines:lines},skipped:0};
+  const keepAuto=ui.sms.auto,keepItems=auto?ui.sms.items:null,keepText=auto?ui.sms.text:'';
+  ui.sms={text:keepText,items:keepItems,auto:keepAuto,report:{title:'اتضافت '+its.length+' حركة',lines:lines},skipped:0};
+  if(auto)smsSync();
   render();
 }
 Object.assign(ACT,{
   smsParse(){runSmsParse()},
-  smsAdd(){addSmsItems()},
+  smsAdd(el){addSmsItems(!!(el&&el.dataset&&el.dataset.auto))},
   exportData(){exportData()},
   importOpen(){
     openSheet('<h3>استرجاع نسخة</h3><div style="font-size:14px;color:var(--muted)">الصق محتوى ملف النسخة الاحتياطية. ده هيستبدل كل بيانات الدفتر الحالية.</div>'
@@ -805,12 +814,12 @@ Object.assign(ACT,{
 });
 Object.assign(INP,{
   smsText(el){ui.sms.text=el.value},
-  smsOn(el){ui.sms.items[+el.dataset.i].on=el.checked},
-  smsType(el){const it=ui.sms.items[+el.dataset.i];it.type=el.value;render()},
-  smsAcc(el){ui.sms.items[+el.dataset.i].acc=el.value},
-  smsAcc2(el){ui.sms.items[+el.dataset.i].acc2=el.value},
-  smsPerson(el){ui.sms.items[+el.dataset.i].person=el.value},
-  smsNote(el){ui.sms.items[+el.dataset.i].note=el.value},
+  smsOn(el){SL(el)[+el.dataset.i].on=el.checked},
+  smsType(el){const it=SL(el)[+el.dataset.i];it.type=el.value;if(el.value==='xfer'&&it.dir==='in'&&!it.swapped){const a=it.acc;it.acc=it.acc2;it.acc2=a;it.swapped=true}render()},
+  smsAcc(el){SL(el)[+el.dataset.i].acc=el.value},
+  smsAcc2(el){SL(el)[+el.dataset.i].acc2=el.value},
+  smsPerson(el){SL(el)[+el.dataset.i].person=el.value},
+  smsNote(el){SL(el)[+el.dataset.i].note=el.value},
   impText(){}
 });
 
@@ -819,6 +828,7 @@ async function exportData(){
   const d=new Date(),p=n=>String(n).padStart(2,'0');
   const data=JSON.stringify({v:1,exported:d.toISOString(),accounts:S.accounts,meta:S.meta,tx:S.tx});
   const name='daftar-hesabaty-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
+  if(window.AndroidBridge&&window.AndroidBridge.shareText){window.AndroidBridge.shareText('نسخة دفتر حساباتي',data);return}
   try{
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;
     document.body.appendChild(a);a.click();a.remove();toast('اتحمّلت النسخة');return;
@@ -960,14 +970,14 @@ function reconHtml(){
   const sb=S.meta.smsBal||{},ids=Object.keys(sb).filter(id=>accById(id)&&!accById(id).hidden);
   let h='<div class="sec"><h2>مطابقة الرصيد مع الرسائل</h2></div>';
   if(!ids.length)return h+'<div class="empty" style="padding:10px">لما تضيف رسايل فيها رصيد، هقارن رصيد كل رسالة بالدفتر وقت وصولها وأقولك فين الفرق.</div>';
-  h+='<div class="list">';
+  h+='<div class="list">';let bad=0;
   ids.forEach(id=>{
-    const r=sb[id],bk=balanceAt(id,r.t),d=Math.round((r.v-bk)*100)/100,ok=Math.abs(d)<0.5;
+    const r=sb[id],bk=balanceAt(id,r.t),d=Math.round((r.v-bk)*100)/100,ok=Math.abs(d)<0.5;if(!ok)bad++;
     h+='<div class="row" style="flex-wrap:wrap"><div class="mid"><div class="t1">'+esc(accName(id))+'</div><div class="t2">رسالة '+esc(dayLabel(r.t))+' '+timeLabel(r.t)+': '+N(fmt(r.v))+' · الدفتر وقتها: '+N(fmt(bk))+'</div></div>'
       +(ok?'<div class="amt in">مظبوط</div>':'<div class="amt debt">فرق '+N(fmt(Math.abs(d)))+'</div>')
       +(ok?'':'<div style="flex-basis:100%;font-size:12.5px;color:var(--muted)">'+(d>0?'دخل حسابك فلوس ما اتسجّلتش':'خرج من حسابك فلوس ما اتسجّلتش')+' <button class="link" data-act="recDiff" data-id="'+esc(id)+'">سجّل الفرق</button></div>')+'</div>';
   });
-  return h+'</div>';
+  return h+'</div>'+(bad?'<div class="btns">'+btn('recAll','ظبّط كل الأرصدة زي الرسايل','primary')+'</div>':'');
 }
 
 /* ---------- الناس ورسائل واتساب ---------- */
@@ -1224,6 +1234,145 @@ Object.assign(INP,{
   oNum(el){OS.num=el.value;opUpdate()},
   oFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;OS.fee=v}
 });
+
+/* ---------- القراءة التلقائية للرسائل (تطبيق الأندرويد) ---------- */
+const ABR=()=>window.AndroidBridge||null;
+const smsAvailable=()=>!!(ABR()&&ABR().readSms);
+const smsOn=()=>{try{return smsAvailable()&&ABR().hasSmsPermission()}catch(e){return false}};
+const sndList=()=>S.meta.smsSenders||[];
+const APK_URL='https://github.com/eslamC-dotcom/Hesabate/releases/download/android-latest/hesabaty.apk';
+function guessSenderAcc(a){
+  const L=liveAccs(),pick=k=>{const x=L.find(y=>y.kind===k);return x?x.id:null};
+  if(/vodafone|vf|فودافون|cash|كاش/i.test(a))return pick('wallet')||(L[0]&&L[0].id);
+  if(/bank|banque|cib|nbe|ahly|misr|qnb|hsbc|alex|بنك|اهلي|الأهلي|مصر/i.test(a))return pick('bank')||(L[0]&&L[0].id);
+  return L[0]?L[0].id:null;
+}
+function findMatch(p,acc){
+  let best=null,bd=1e18,bs=null;
+  S.tx.forEach(x=>{
+    if(Math.abs(x.amt-p.amt)>0.005)return;
+    const dt=Math.abs(x.t-p.t);if(dt>36*36e5)return;
+    let s=null;
+    if(p.dir==='out'||p.dir==null){if(x.from===acc&&!x.so)s='so'}
+    if(!s&&(p.dir==='in'||p.dir==null)){if(x.to===acc&&!x.si)s='si'}
+    if(!s)return;
+    if(dt<bd){bd=dt;best=x;bs=s}
+  });
+  return best?{x:best,s:bs}:null;
+}
+function smsSync(){
+  const A=ui.sms.auto=ui.sms.auto||{items:[],matched:0,last:0,err:''};
+  A.items=[];A.matched=0;A.err='';
+  if(!smsOn()||!sndList().length)return;
+  const since=S.meta.smsSince||(Date.now()-30*864e5);
+  let arr=[];
+  try{arr=JSON.parse(ABR().readSms(since,JSON.stringify(sndList().map(s=>s.a)),500)||'[]')}catch(e){A.err='مقدرتش أقرا الرسائل';return}
+  const seen=new Set(S.meta.seen||[]),sb=S.meta.smsBal=S.meta.smsBal||{};
+  S.meta.seen=S.meta.seen||[];
+  let changed=false,maxD=since;const pend=[];
+  arr.forEach(m=>{
+    maxD=Math.max(maxD,m.date);
+    const p=parseMsg(m.body,m.date);if(!p)return;
+    if(p.dir==null&&p.bal==null)return;
+    const snd=sndList().find(s=>s.a===m.address),acc=(snd&&accById(snd.acc)&&!accById(snd.acc).hidden)?snd.acc:guessAcc(p.m);
+    const h=hashStr(p.m+'|'+m.date);
+    if(p.bal!=null&&(!sb[acc]||sb[acc].t<=m.date)&&(!sb[acc]||sb[acc].v!==p.bal||sb[acc].t!==m.date)){sb[acc]={v:p.bal,t:m.date};changed=true}
+    if(seen.has(h))return;
+    const mt=findMatch(p,acc);
+    if(mt){mt.x[mt.s]=h;mt.x.t=m.date;S.meta.seen.push(h);seen.add(h);A.matched++;changed=true;return}
+    const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
+    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:'',
+      note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
+  });
+  A.items=pend;A.last=Date.now();
+  const ns=pend.length?Math.min.apply(null,pend.map(x=>x.t))-1:maxD;
+  if(ns!==S.meta.smsSince){S.meta.smsSince=ns;changed=true}
+  if(S.meta.seen.length>2000)S.meta.seen=S.meta.seen.slice(-2000);
+  if(changed)touch({meta:true});
+}
+function autoSync(){
+  if(!loaded||!smsOn()||!sndList().length)return;
+  smsSync();render();
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)autoSync()});
+window.onSmsPermission=function(g){
+  if(g){toast('اتفعّلت قراءة الرسائل');render()}else toast('من غير الصلاحية القراءة التلقائية مش هتشتغل');
+};
+
+function autoHtml(){
+  if(!smsAvailable())return '<div class="card" style="margin-bottom:10px;font-size:14px;color:var(--muted)"><b style="color:var(--fg)">القراءة التلقائية</b><br>بتشتغل في تطبيق الأندرويد. نزّله من المزيد ← تطبيق الأندرويد.</div>';
+  const A=ui.sms.auto||{items:[],matched:0,err:''};
+  if(!smsOn())return '<div class="card" style="margin-bottom:10px"><b>القراءة التلقائية للرسائل</b><p style="margin:6px 0;color:var(--muted);font-size:14px">التطبيق هيقرا رسايل البنك وفودافون كاش اللي إنت تختارها بس، وبيقراها على تليفونك. اللي بيتحفظ في حسابك الحركات اللي بتوافق عليها، مش نص الرسايل.</p><div class="btns">'+btn('smsPerm','اسمح بقراءة الرسائل','primary')+'</div></div>';
+  const sn=sndList();
+  if(!sn.length)return '<div class="card" style="margin-bottom:10px"><b>اختار جهات الرسائل</b><p style="margin:6px 0;color:var(--muted);font-size:14px">علّم على جهة البنك وفودافون كاش بس.</p><div class="btns">'+btn('smsPick','اختار الجهات','primary')+'</div></div>';
+  let h='<div class="card" style="margin-bottom:10px"><div class="kv"><span>بيتابع</span><b>'+sn.map(s=>esc(s.a)).join('، ')+'</b></div>'
+    +'<div class="kv"><span>اتطابق مع الدفتر في آخر قراءة</span><b>'+N(A.matched||0)+'</b></div>'
+    +'<div class="kv"><span>محتاج قرارك</span><b>'+N(A.items.length)+'</b></div>'
+    +(A.err?'<div class="warn">'+esc(A.err)+'</div>':'')
+    +'<div class="btns" style="margin-top:8px">'+btn('smsSyncNow','اقرا الرسائل دلوقتي','primary')+btn('smsPick','الجهات')+'</div></div>';
+  if(A.items.length)h+='<div class="sec"><h2>رسائل محتاجة قرارك</h2></div>'+A.items.map((it,i)=>smsItemHtml(it,i,true)).join('')+'<div class="btns">'+btn('smsAdd','أضف المعلّم عليه','primary','data-auto="1"')+'</div>';
+  else h+='<div class="empty" style="padding:10px">كل الرسائل متطابقة مع الدفتر.</div>';
+  return h;
+}
+let SP=null;
+function smsPickSheet(){
+  let list=[];
+  try{list=JSON.parse(ABR().listSenders(Date.now()-90*864e5)||'[]')}catch(e){}
+  const cur=sndList();
+  const rows=list.map(x=>{const c=cur.find(s=>s.a===x.address);return {a:x.address,n:x.count,on:!!c,acc:c?c.acc:guessSenderAcc(x.address)}});
+  cur.forEach(c=>{if(!rows.some(r=>r.a===c.a))rows.push({a:c.a,n:0,on:true,acc:c.acc})});
+  SP={rows:rows};
+  const opts=sel=>liveAccs().map(a=>'<option value="'+esc(a.id)+'"'+(a.id===sel?' selected':'')+'>'+esc(a.name)+'</option>').join('');
+  openSheet('<h3>جهات الرسائل</h3><div style="font-size:14px;color:var(--muted)">علّم على جهة البنك وفودافون كاش بس، واختار الحساب بتاعها في الدفتر.</div>'
+    +(rows.length?rows.map((r,i)=>'<div class="sms"><label class="chk"><input type="checkbox" data-in="spOn" data-i="'+i+'"'+(r.on?' checked':'')+'><span dir="auto">'+esc(r.a)+(r.n?' <small style="color:var(--muted)">('+r.n+' رسالة)</small>':'')+'</span></label>'
+      +'<div class="field" style="margin-block:4px"><label for="spAcc'+i+'">الحساب</label><select id="spAcc'+i+'" data-in="spAcc" data-i="'+i+'">'+opts(r.acc)+'</select></div></div>').join('')
+      :'<div class="empty">مالقيتش رسايل في آخر 90 يوم.</div>')
+    +'<div class="btns">'+btn('spSave','حفظ وابدأ','primary')+'</div>');
+}
+function androidCard(){
+  let h='<div class="sec"><h2>تطبيق الأندرويد</h2></div><div class="card" style="font-size:14px">';
+  if(window.AndroidBridge)return h+'إنت داخل من تطبيق الأندرويد.</div>';
+  return h+'<p style="margin:0 0 8px;color:var(--muted)">النسخة دي بتقرا رسايل البنك وفودافون كاش وتطابقها مع الدفتر. نزّل الملف على تليفون الأندرويد وافتحه. لو التليفون سأل عن تثبيت من مصدر غير معروف، اسمح لمتصفحك بالتثبيت.</p>'
+    +'<a class="btn primary" style="display:block;text-align:center;text-decoration:none" href="'+APK_URL+'">تحميل تطبيق الأندرويد</a></div>';
+}
+Object.assign(ACT,{
+  smsPerm(){try{ABR().requestSmsPermission()}catch(e){toast('مقدرتش أطلب الصلاحية')}},
+  smsPick(){smsPickSheet()},
+  spSave(){
+    S.meta.smsSenders=SP.rows.filter(r=>r.on).map(r=>({a:r.a,acc:r.acc}));
+    S.meta.smsSince=Date.now()-30*864e5;
+    closeSheet();touch({meta:true});smsSync();render();
+    toast(S.meta.smsSenders.length?'بدأت أتابع '+S.meta.smsSenders.length+' جهة':'مفيش جهات متابعة');
+  },
+  smsSyncNow(){smsSync();render();toast('خلصت قراءة الرسائل')},
+  smsSkip(el){
+    const A=ui.sms.auto,it=A&&A.items[+el.dataset.i];if(!it)return;
+    S.meta.seen.push(it.h);A.items.splice(+el.dataset.i,1);touch({meta:true});
+  },
+  smsQuick(el){
+    const it=SL(el)[+el.dataset.i];if(!it)return;
+    const t=el.dataset.t;it.type=t;
+    if(t==='xfer'&&it.dir==='in'&&!it.swapped){const a=it.acc;it.acc=it.acc2;it.acc2=a;it.swapped=true}
+    render();
+  },
+  recAll(){
+    const sb=S.meta.smsBal||{},made=[];
+    Object.keys(sb).forEach(id=>{
+      if(!accById(id)||accById(id).hidden)return;
+      const d=r2(sb[id].v-balanceAt(id,sb[id].t));if(Math.abs(d)<0.5)return;
+      made.push({id:gid(),t:sb[id].t,type:'adj',amt:Math.abs(d),from:d<0?id:null,to:d>0?id:null,person:null,cat:'غير مسجّل',once:false,note:'ظبط الرصيد زي الرسالة'});
+    });
+    if(!made.length){toast('الأرصدة كلها مظبوطة');return}
+    S.tx=S.tx.concat(made);touch({});
+    const ids=made.map(x=>x.id);
+    toast('اتظبط رصيد '+made.length+' حساب',()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
+  }
+});
+Object.assign(INP,{
+  spOn(el){SP.rows[+el.dataset.i].on=el.checked},
+  spAcc(el){SP.rows[+el.dataset.i].acc=el.value}
+});
+const SL=el=>el.dataset.auto?ui.sms.auto.items:ui.sms.items;
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){

@@ -131,7 +131,7 @@ body{margin:0;padding-top:env(safe-area-inset-top,0px)}
 .gcard{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px 20px;width:100%;max-width:420px}
 .gcard h2{font-family:var(--f-disp);font-size:24px;margin:0 0 6px}
 .gcard p{color:var(--muted);font-size:14px;margin:0 0 12px}
-.toast{inset:calc(env(safe-area-inset-top,0px) + 12px) 0 auto 0}.shead{display:flex;justify-content:space-between;align-items:center;margin:0 0 4px}.sbtn{padding:8px 14px;border-radius:10px;background:var(--chip);font-weight:600;font-size:14px;min-height:40px}.qa .btn{font-size:14px}.qa{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}.qa .btn{padding:14px 10px}</style>
+.nav .tab{position:relative}.bdg{position:absolute;top:0;left:calc(50% + 2px);min-width:18px;height:18px;border-radius:9px;background:var(--out);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 4px}.bdg[hidden]{display:none}.toast{inset:calc(env(safe-area-inset-top,0px) + 12px) 0 auto 0}.shead{display:flex;justify-content:space-between;align-items:center;margin:0 0 4px}.sbtn{padding:8px 14px;border-radius:10px;background:var(--chip);font-weight:600;font-size:14px;min-height:40px}.qa .btn{font-size:14px}.qa{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}.qa .btn{padding:14px 10px}</style>
 </head>
 <body>
 <div id="app" dir="rtl" lang="ar">
@@ -143,7 +143,7 @@ body{margin:0;padding-top:env(safe-area-inset-top,0px)}
     <button class="tab" data-act="tab" data-tab="log"><svg viewBox="0 0 24 24"><path d="M5 4h14M5 9h14M5 14h14M5 19h9"/></svg>السجل</button>
     <button class="fab" data-act="newTx" aria-label="سجّل حركة"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="tab" data-act="tab" data-tab="people"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.200 6 5.500"/><path d="M16 5.2a3.200 3.200 0 0 1 0 6M18 14.800c1.800.700 3 2.400 3 5.200"/></svg>الناس</button>
-    <button class="tab" data-act="tab" data-tab="sms"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.500h8M8 12.500h5"/></svg>رسائل</button>
+    <button class="tab" data-act="tab" data-tab="sms"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.500h8M8 12.500h5"/></svg>رسائل<span class="bdg" id="smsBdg" hidden></span></button>
     <button class="tab" data-act="tab" data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.400"/><circle cx="12" cy="12" r="1.400"/><circle cx="19" cy="12" r="1.400"/></svg>المزيد</button>
   </div></nav>
   <div id="sheetRoot"></div>
