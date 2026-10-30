@@ -23,12 +23,27 @@ jobs:
       - name: Build release APK
         working-directory: android
         run: gradle --no-daemon assembleRelease
-      - name: Prepare file
-        run: cp android/app/build/outputs/apk/release/app-release.apk hesabaty.apk
+      - name: Verify APK
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          R=$($BT/apksigner verify --verbose --print-certs $APK 2>&1 | tr '\n' ' ')
+          echo "::notice title=apksigner::$R"
+          B=$($BT/aapt2 dump badging $APK 2>&1 | grep -E "^package|sdkVersion|targetSdk|uses-permission|launchable" | tr '\n' ' ')
+          echo "::notice title=badging::$B"
+      - name: Build debug APK (fallback signature)
+        working-directory: android
+        run: gradle --no-daemon assembleDebug
+      - name: Prepare files
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk hesabaty.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk hesabaty-debug.apk
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
           name: تطبيق الأندرويد
           body: ملف تثبيت دفتر حساباتي للأندرويد. بيتحدّث تلقائيًا مع كل تغيير في مجلد android.
-          files: hesabaty.apk
+          files: |
+            hesabaty.apk
+            hesabaty-debug.apk
