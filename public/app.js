@@ -248,7 +248,7 @@ function vHome(){
   let h='<section class="hero"><div class="lbl">الفلوس اللي معاك دلوقتي</div><div class="big">'+N(fmt(T.cash))+'<small>ج.م</small></div>'
     +'<div class="sub"><div><b>'+N(fmt(T.owedToMe))+'</b><span>ليك عند الناس</span></div><div><b>'+N(fmt(T.iOwe))+'</b><span>عليك للناس</span></div></div>'
     +'<div class="lbl" style="margin-top:10px">الصافي بعد الديون: <b>'+N(fmt(T.net))+'</b> ج.م</div></section>';
-  h+='<div class="btns" style="margin:0 0 12px"><button class="btn primary" data-act="vcOpen">تحويل فودافون كاش</button></div>';
+  h+='<div class="qa"><button class="btn" data-act="quick" data-type="exp">مصروف</button><button class="btn" data-act="quick" data-type="inc">دخل</button><button class="btn" data-act="quick" data-type="lend">سلّفت حد</button><button class="btn primary" data-act="vcOpen">تحويل فودافون كاش</button></div>';
   if(first)h+='<div class="card" style="margin-bottom:12px"><b>ابدأ من هنا</b><p style="margin:6px 0 0;color:var(--muted);font-size:14px">اضغط على كل حساب تحت واكتب الرصيد اللي فيه فعلًا دلوقتي. بعد كده أي فلوس تدخل أو تطلع، اضغط على الزرار + وسجّلها في ثواني.</p></div>';
   h+='<div class="accs">';
   liveAccs().forEach(a=>{
@@ -328,7 +328,7 @@ function vPeople(){
     return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">'+(p.last?'آخر حركة '+esc(dayLabel(p.last)):'مفيش حركات لسه')+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
   };
   let h='<div class="sec"><h2>الناس والديون</h2></div><div class="btns" style="margin-top:0">'
-    +btn('newDebt','سلّفت حد','','data-type="lend"')+btn('newDebt','استلفت من حد','','data-type="borrow"')+btn('addPerson','+ إضافة شخص')+'</div>';
+    +btn('newDebt','سلّفت حد','','data-type="lend"')+btn('newDebt','استلفت من حد','','data-type="borrow"')+btn('addPerson','+ إضافة شخص','primary')+'</div>';
   if(!P.length)h+='<div class="empty">لسه مفيش حد. أول ما تسجّل سلفة هتظهر هنا.</div>';
   if(mine.length)h+='<div class="sec"><h2>ليك عندهم</h2></div><div class="list">'+mine.map(row).join('')+'</div>';
   if(owe.length)h+='<div class="sec"><h2>عليك ليهم</h2></div><div class="list">'+owe.map(row).join('')+'</div>';
@@ -408,16 +408,22 @@ function personInfo(){
   const nm=E.person.trim();if(!nm)return null;
   const p=people().find(q=>q.name===nm);return p||{name:nm,bal:0,last:0};
 }
+const TGROUPS=[['فلوسي',['exp','inc','xfer']],['الناس',['lend','repay_in','borrow','repay_out']],['بين حساباتي',['aloan','arepay']]];
+const TCHIP={exp:'مصروف',inc:'دخل',xfer:'تحويل بين حساباتي',lend:'سلّفت حد',repay_in:'حد رجّع لي',borrow:'استلفت من حد',repay_out:'سدّدت لحد',aloan:'حساب سلّف حساب',arepay:'حساب سدّد حساب'};
+const hasPicker=()=>!!(navigator.contacts&&navigator.contacts.select);
 function entryDyn(){
-  const T=TYPES[E.type];let h='<div class="lbl2" style="margin-top:14px">النوع</div><div class="seg" style="margin-top:6px">'
-    +ENTRY_ORDER.map(t=>'<button class="chip'+(E.type===t?' on':'')+'" data-act="eType" data-type="'+t+'">'+TYPES[t].l+'</button>').join('')+'</div>'
-    +'<div style="font-size:12.5px;color:var(--muted);margin-top:6px">'+esc(T.long)+'</div>';
+  const T=TYPES[E.type];
+  let h=TGROUPS.map(g=>'<div class="lbl2" style="margin-top:12px">'+g[0]+'</div><div class="chips" style="margin-top:6px">'
+    +g[1].map(t=>'<button class="chip sm'+(E.type===t?' on':'')+'" data-act="eType" data-type="'+t+'">'+TCHIP[t]+'</button>').join('')+'</div>').join('');
+  h+='<div style="font-size:12.5px;color:var(--muted);margin-top:8px">'+esc(T.long)+'</div>';
   if(T.from)h+='<div class="field"><span class="lbl2">'+esc(FROM_L[E.type]||'من')+'</span>'+accChips('eFrom',E.from)+'</div>';
   if(T.to)h+='<div class="field"><span class="lbl2">'+esc(TO_L[E.type]||'إلى')+'</span>'+accChips('eTo',E.to)+'</div>';
   if(T.person){
-    const P=people().sort((a,b)=>b.last-a.last).slice(0,8);
-    h+='<div class="field"><label for="ePerson">الاسم</label><input type="text" id="ePerson" value="'+esc(E.person)+'" data-in="ePerson" placeholder="اسم الشخص" autocomplete="off">'
-      +(P.length?'<div class="scroll-x" style="margin-top:4px">'+P.map(p=>'<button class="chip sm'+(p.name===E.person?' on':'')+'" data-act="ePersonPick" data-p="'+esc(encodeURIComponent(p.name))+'">'+esc(p.name)+'</button>').join('')+'</div>':'')
+    const P=peopleAll().sort((a,b)=>b.last-a.last||a.name.localeCompare(b.name,'ar'));
+    h+='<div class="field"><span class="lbl2">مين الشخص؟</span>'
+      +(P.length?'<div class="chips">'+P.map(p=>'<button class="chip'+(p.name===E.person?' on':'')+'" data-act="ePersonPick" data-p="'+esc(encodeURIComponent(p.name))+'">'+esc(p.name)+'</button>').join('')+'</div>':'<div style="font-size:13px;color:var(--muted)">لسه مفيش ناس. اكتب اسم أو اختار من جهات الاتصال.</div>')
+      +(hasPicker()?'<div class="btns" style="margin-top:8px">'+btn('pickContact','اختار من جهات الاتصال','','data-ctx="entry"')+'</div>':'')
+      +'<label for="ePerson" class="lbl2" style="margin-top:8px">أو اكتب اسم جديد</label><input type="text" id="ePerson" value="'+esc(E.person)+'" data-in="ePerson" placeholder="اسم الشخص" autocomplete="off">'
       +'<div id="ePInfo">'+personInfoHtml()+'</div></div>';
   }
   if(E.type==='exp'){
@@ -479,6 +485,7 @@ function saveEntry(again){
   const L=S.meta.last=S.meta.last||{};L.type=E.type;
   if(T.from)L[E.type+'_from']=E.from;if(T.to)L[E.type+'_to']=E.to;
   learn(x);
+  if(x.person){const cs=S.meta.contacts=S.meta.contacts||[];if(!cs.some(k=>k.n===x.person))cs.push({n:x.person,p:''})}
   const wasEdit=!!E.editId,months=[x.t];if(oldT!=null)months.push(oldT);
   const nextType=E.type;
   touch({meta:true,months:months});
@@ -549,7 +556,7 @@ function openPerson(name){
   if(p.bal>0)h+=btn('personAct','رجّع لي','primary','data-type="repay_in" data-amt="'+p.bal+'" data-p="'+esc(e)+'"')+btn('personAct','سلّفته كمان','','data-type="lend" data-p="'+esc(e)+'"');
   else if(p.bal<0)h+=btn('personAct','سدّدت له','primary','data-type="repay_out" data-amt="'+(-p.bal)+'" data-p="'+esc(e)+'"')+btn('personAct','استلفت منه كمان','','data-type="borrow" data-p="'+esc(e)+'"');
   else h+=btn('personAct','سلّفته','primary','data-type="lend" data-p="'+esc(e)+'"')+btn('personAct','استلفت منه','','data-type="borrow" data-p="'+esc(e)+'"');
-  h+=btn('waOpen','رسالة واتساب بالتفاصيل','','data-p="'+esc(e)+'"')+'</div><div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
+  h+=btn('personVc','تحويل فودافون كاش له','','data-p="'+esc(e)+'"')+btn('waOpen','رسالة واتساب بالتفاصيل','','data-p="'+esc(e)+'"')+'</div><div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
   openSheet(h);
 }
 
@@ -834,6 +841,7 @@ function vcDefaultFrom(){
 function vcOpen(){
   VT={num:'',name:'',amt:'',fee:'',purpose:'exp',from:vcDefaultFrom()};
   openSheet('<h3>تحويل فودافون كاش</h3>'
+    +(hasPicker()?'<div class="btns" style="margin-top:0">'+btn('pickContact','اختار من جهات الاتصال','primary','data-ctx="vc"')+'</div>':'')
     +'<div id="vContacts"></div>'
     +'<div class="field"><label for="vNum">رقم المستلم</label><input type="text" id="vNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" data-in="vNum"></div>'
     +'<div class="field"><label for="vName">الاسم (اكتبه عشان الرقم يتحفظ)</label><input type="text" id="vName" autocomplete="off" data-in="vName"></div>'
@@ -990,6 +998,7 @@ function waSheet(name,num,intro){
 }
 function addPersonSheet(){
   openSheet('<h3>إضافة شخص</h3>'
+    +(hasPicker()?'<div class="btns" style="margin-top:0">'+btn('pickContact','اختار من جهات الاتصال','primary','data-ctx="ap"')+'</div>':'')
     +'<div class="field"><label for="apName">الاسم</label><input type="text" id="apName" autocomplete="off" data-in="apName"></div>'
     +'<div class="field"><label for="apNum">رقم الموبايل (فودافون كاش وواتساب)</label><input type="text" id="apNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" data-in="apNum"></div>'
     +'<div id="apErr"></div><div class="btns">'+btn('apSave','حفظ','primary')+'</div>');
@@ -1027,6 +1036,38 @@ Object.assign(INP,{
   waMsg(el){WA.msg=el.value},
   apName(el){AP.name=el.value},
   apNum(el){AP.num=el.value}
+});
+
+async function pickPhoneContact(){
+  if(!hasPicker()){toast('المتصفح ده مش بيدعم جهات الاتصال. اكتب الاسم والرقم');return null}
+  try{
+    const r=await navigator.contacts.select(['name','tel'],{multiple:false});
+    if(!r||!r.length)return null;
+    const k=r[0],name=((k.name&&k.name[0])||'').trim(),tels=(k.tel||[]).map(normPhone).filter(okPhone);
+    if(!tels.length)toast('مفيش رقم موبايل مصري صالح للجهة دي');
+    return {name:name,num:tels[0]||''};
+  }catch(e){return null}
+}
+Object.assign(ACT,{
+  async pickContact(el){
+    const r=await pickPhoneContact();if(!r)return;
+    const ctx=el.dataset.ctx;
+    if(ctx==='ap'&&AP){AP.name=r.name||AP.name;AP.num=r.num||AP.num;$('#apName').value=AP.name;$('#apNum').value=AP.num}
+    else if(ctx==='vc'&&VT){VT.name=r.name||VT.name;VT.num=r.num||VT.num;$('#vName').value=VT.name;$('#vNum').value=VT.num;vcDyn();vcNote()}
+    else if(ctx==='entry'&&E){
+      if(!r.name){toast('الجهة دي من غير اسم');return}
+      E.person=r.name;const cs=contacts(),i=cs.findIndex(k=>k.n===r.name);
+      if(i>=0){if(r.num)cs[i].p=r.num}else cs.push({n:r.name,p:r.num});
+      touch({meta:true});entryDyn();
+    }
+  },
+  quick(el){newEntry(el.dataset.type)},
+  personVc(el){
+    const name=decodeURIComponent(el.dataset.p),p=people().find(q=>q.name===name)||{bal:0},c=contactFor(name);
+    closeSheet();vcOpen();
+    VT.name=name;VT.num=(c&&c.p)||'';VT.purpose=p.bal<-0.004?'repay_out':'lend';
+    $('#vName').value=VT.name;$('#vNum').value=VT.num;vcDyn();vcNote();
+  }
 });
 
 /* ---------- الدخول والخروج ---------- */
