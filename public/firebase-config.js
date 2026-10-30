@@ -1,10 +1,9 @@
-// الصق هنا إعدادات مشروعك من: Firebase Console ← Project settings ← Your apps ← Web app ← Config
-// الإعدادات دي مش سرية، الحماية الحقيقية في firestore.rules
+// إعدادات مشروع Firebase (hesabatyapp-c8895). القيم دي مش سرية، الحماية في firestore.rules
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyBHHHgsxq8evZEz7PeW4QPtpo6idnvc_XQ",
+  authDomain: "hesabatyapp-c8895.firebaseapp.com",
+  projectId: "hesabatyapp-c8895",
+  storageBucket: "hesabatyapp-c8895.firebasestorage.app",
+  messagingSenderId: "751027512845",
+  appId: "1:751027512845:web:94803a48e6a294e50a9744"
 };
