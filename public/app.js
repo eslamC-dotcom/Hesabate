@@ -27,7 +27,7 @@ const TYPES={
 const ENTRY_ORDER=['exp','inc','xfer','lend','repay_in','borrow','repay_out','aloan','arepay'];
 const S={accounts:[],tx:[],meta:{seen:[],last:{},kw:{}}};
 const ui={tab:'home',fAcc:'all',fKind:'all',q:'',limit:80};
-const freshMeta=()=>({seen:[],last:{},kw:{}});
+const freshMeta=()=>({seen:[],last:{},kw:{},contacts:[],smsBal:{}});
 function defaults(){return [
   {id:'a_cash',name:'جيبي',kind:'cash',color:COLORS[0],open:0},
   {id:'a_shop',name:'الدكان',kind:'shop',color:COLORS[1],open:0},
@@ -248,6 +248,7 @@ function vHome(){
   let h='<section class="hero"><div class="lbl">الفلوس اللي معاك دلوقتي</div><div class="big">'+N(fmt(T.cash))+'<small>ج.م</small></div>'
     +'<div class="sub"><div><b>'+N(fmt(T.owedToMe))+'</b><span>ليك عند الناس</span></div><div><b>'+N(fmt(T.iOwe))+'</b><span>عليك للناس</span></div></div>'
     +'<div class="lbl" style="margin-top:10px">الصافي بعد الديون: <b>'+N(fmt(T.net))+'</b> ج.م</div></section>';
+  h+='<div class="btns" style="margin:0 0 12px"><button class="btn primary" data-act="vcOpen">تحويل فودافون كاش</button></div>';
   if(first)h+='<div class="card" style="margin-bottom:12px"><b>ابدأ من هنا</b><p style="margin:6px 0 0;color:var(--muted);font-size:14px">اضغط على كل حساب تحت واكتب الرصيد اللي فيه فعلًا دلوقتي. بعد كده أي فلوس تدخل أو تطلع، اضغط على الزرار + وسجّلها في ثواني.</p></div>';
   h+='<div class="accs">';
   liveAccs().forEach(a=>{
@@ -344,6 +345,9 @@ function vMore(){
   });
   h+='</div><div class="btns">'+btn('newAcc','+ حساب جديد')+'</div>';
   h+='<div class="sec"><h2>حسابك</h2></div><div class="card"><div class="kv"><span>داخل بـ</span><b class="num">'+esc(userEmail||'')+'</b></div><p style="margin:8px 0 0;color:var(--muted);font-size:14px">بياناتك محفوظة في قاعدة بيانات Firebase على حسابك، وبتتزامن بين كل أجهزتك وبتشتغل من غير نت.</p><div class="btns" style="margin-top:8px">'+btn('signOut','تسجيل خروج')+'</div></div>';
+  h+='<div class="sec"><h2>الأرقام المحفوظة</h2></div>';
+  const cs=S.meta.contacts||[];
+  h+=cs.length?'<div class="list">'+cs.map((c,i)=>'<div class="row"><div class="mid"><div class="t1">'+esc(c.n)+'</div><div class="t2 num">'+esc(c.p)+'</div></div><button class="link" data-act="delContact" data-i="'+i+'">مسح</button></div>').join('')+'</div>':'<div class="empty" style="padding:10px">الأرقام اللي تحوّل لها بتتحفظ هنا.</div>';
   h+='<div class="sec"><h2>نسخة احتياطية</h2></div><div class="card"><p style="margin:0 0 6px;color:var(--muted);font-size:14px">حمّل نسخة من بياناتك كملف، أو استرجع نسخة قديمة.</p><div class="btns" style="margin-top:8px">'+btn('exportData','حفظ نسخة','primary')+btn('importOpen','استرجاع نسخة')+'</div></div>';
   h+='<div class="sec"><h2>عن الدفتر</h2></div><div class="card" style="font-size:14px;color:var(--muted)">'
     +'لو حساب سلّف حساب تاني (جيبي سلّف الدكان مثلًا) سجّلها "سلفة لحساب" وهتظهر في الرئيسية تحت "ديون بين حساباتك". ولو حد سابلك فلوس أمانة سجّلها "استلفت" باسمه، وهتتخصم من "الصافي" لأنها مش بتاعتك. الرصيد بيتحسب من الحركات اللي بتسجّلها. لو نسيت تسجّل حاجة، افتح الحساب واكتب الرصيد الفعلي والدفتر هيسجّل الفرق لوحده كحركة "غير مسجّل" وتعرف حجم اللخبطة.</div>';
@@ -728,6 +732,7 @@ function vSms(){
       +'<div class="btns">'+btn('smsAdd','أضف المعلّم عليه','primary')+'</div>';
     if(s.skipped)h+='<div class="empty" style="padding:8px">'+s.skipped+' رسالة معرفتش أطلّع منها مبلغ فاتخطيتها.</div>';
   }
+  h+=reconHtml();
   return h;
 }
 function addSmsItems(){
@@ -745,6 +750,7 @@ function addSmsItems(){
       person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms'};
     S.tx.push(x);months.push(x.t);
     S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-600);
+    if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{};if(!sb[it.acc]||sb[it.acc].t<=it.t)sb[it.acc]={v:it.bal,t:it.t}}
     if(it.bal!=null&&(!lastBal[it.acc]||lastBal[it.acc].t<=it.t))lastBal[it.acc]={t:it.t,v:it.bal};
   });
   touch({meta:true,months:months});
@@ -809,6 +815,134 @@ app.addEventListener('click',ev=>{const el=ev.target.closest('[data-act]');if(!e
 ['input','change'].forEach(n=>app.addEventListener(n,ev=>{const el=ev.target,k=el.dataset&&el.dataset.in;if(k&&INP[k])INP[k](el,ev)}));
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape')closeSheet()});
 
+
+/* ---------- تحويل فودافون كاش ---------- */
+function normPhone(s){
+  let v=normDigits(s).replace(/[\s\-().]/g,'');
+  if(v.indexOf('+20')===0)v='0'+v.slice(3);else if(v.indexOf('0020')===0)v='0'+v.slice(4);else if(/^20\d{10}$/.test(v))v='0'+v.slice(2);
+  return v;
+}
+const okPhone=v=>/^01[0125]\d{8}$/.test(v);
+const contacts=()=>S.meta.contacts||(S.meta.contacts=[]);
+const VPURP=[['exp','دفعة أو مصروف'],['lend','سلفة له'],['repay_out','سداد دين عليّا']];
+let VT=null;
+function vcDefaultFrom(){
+  const ids=liveAccs().map(a=>a.id),l=(S.meta.last||{}).vcFrom;
+  if(l&&ids.indexOf(l)>=0)return l;
+  const w=liveAccs().find(a=>a.kind==='wallet');return w?w.id:ids[0];
+}
+function vcOpen(){
+  VT={num:'',name:'',amt:'',fee:'',purpose:'exp',from:vcDefaultFrom()};
+  openSheet('<h3>تحويل فودافون كاش</h3>'
+    +'<div id="vContacts"></div>'
+    +'<div class="field"><label for="vNum">رقم المستلم</label><input type="text" id="vNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" data-in="vNum"></div>'
+    +'<div class="field"><label for="vName">الاسم (اكتبه عشان الرقم يتحفظ)</label><input type="text" id="vName" autocomplete="off" data-in="vName"></div>'
+    +'<div class="field"><label for="vAmt">المبلغ بالجنيه</label><input type="text" id="vAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vAmt"></div>'
+    +'<div id="vDyn"></div>'
+    +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div>'
+    +'<div id="vErr"></div>'
+    +'<div class="btns">'+btn('vGen','جهّز الكود','primary')+'</div>');
+  vcDyn();
+}
+function vcDyn(){
+  const c=$('#vContacts');
+  if(c)c.innerHTML=contacts().length?'<div class="lbl2">الأرقام المحفوظة</div><div class="scroll-x" style="margin-top:6px;margin-bottom:4px">'
+    +contacts().map((x,i)=>'<button class="chip sm'+(normPhone(VT.num)===x.p?' on':'')+'" data-act="vPick" data-i="'+i+'">'+esc(x.n)+'</button>').join('')+'</div>':'';
+  const d=$('#vDyn');
+  if(d)d.innerHTML='<div class="field"><span class="lbl2">ده تحويل إيه؟</span><div class="chips">'
+    +VPURP.map(p=>'<button class="chip sm'+(VT.purpose===p[0]?' on':'')+'" data-act="vPurp" data-v="'+p[0]+'">'+p[1]+'</button>').join('')+'</div></div>'
+    +'<div class="field"><span class="lbl2">هيتخصم من</span><div class="chips">'
+    +liveAccs().map(a=>'<button class="chip sm'+(VT.from===a.id?' on':'')+'" data-act="vFrom" data-id="'+esc(a.id)+'">'+esc(a.name)+'</button>').join('')+'</div></div>';
+}
+function vcCode(){return '*9*7*'+normPhone(VT.num)+'*'+(Math.round(parseNum(VT.amt)*100)/100)+'#'}
+function vcGen(){
+  const num=normPhone(VT.num),amt=parseNum(VT.amt),e=$('#vErr');
+  const err=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
+  if(!okPhone(num))return err('الرقم لازم يكون رقم موبايل مصري من 11 رقم يبدأ بـ 010 أو 011 أو 012 أو 015');
+  if(!(amt>0))return err('اكتب المبلغ');
+  if(amt!==Math.round(amt*100)/100)return err('المبلغ فيه كسور كتير');
+  if(VT.purpose!=='exp'&&!VT.name.trim())return err('اكتب اسم الشخص عشان السلفة أو السداد تتسجّل باسمه');
+  const code=vcCode(),pn=VT.name.trim();
+  openSheet('<h3>راجع قبل ما تتصل</h3>'
+    +'<div class="card" style="margin-block:8px"><div class="kv"><span>المستلم</span><b>'+esc(pn||'من غير اسم')+'</b></div>'
+    +'<div class="kv"><span>الرقم</span><b class="num">'+esc(num)+'</b></div>'
+    +'<div class="kv"><span>المبلغ</span><b>'+N(fmt(amt))+' ج.م</b></div>'
+    +'<div class="kv"><span>هيتخصم من</span><b>'+esc(accName(VT.from))+'</b></div></div>'
+    +'<div class="lbl2">الكود</div><div class="card" dir="ltr" style="margin-top:6px;text-align:center;font-size:20px;font-weight:700;unicode-bidi:isolate" id="vCode"><bdi dir="ltr">'+esc(code)+'</bdi></div>'
+    +'<div class="btns"><a class="btn primary" style="text-align:center;text-decoration:none" href="tel:'+esc(code.replace(/#/g,'%23'))+'">افتح الاتصال بالكود</a>'+btn('vCopy','نسخ الكود')+'</div>'
+    +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">اتأكد من الرقم والمبلغ قبل ما تضغط اتصال، لأن التحويل مش بيترجّع. فودافون هتطلب منك الرقم السري بتاعك، والتطبيق مش بيشوفه. لو لوحة الاتصال فتحت من غير علامة #، انسخ الكود والصقه بنفسك.</p>'
+    +'<div class="btns" style="margin-top:14px">'+btn('vDone','وصلتني رسالة التأكيد، سجّل التحويل','primary')+btn('vBack','رجوع')+'</div>');
+}
+function vcDone(){
+  const num=normPhone(VT.num),amt=Math.round(parseNum(VT.amt)*100)/100,fee=parseNum(VT.fee),pn=VT.name.trim(),now=Date.now();
+  const txs=[],base={id:gid(),t:now,amt:amt,from:VT.from,to:null,person:null,cat:null,once:false,note:(pn?pn+' · ':'')+num};
+  if(VT.purpose==='exp'){base.type='exp';base.cat='تحويل فودافون كاش'}
+  else{base.type=VT.purpose;base.person=pn}
+  txs.push(base);
+  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش'});
+  S.tx=S.tx.concat(txs);
+  if(pn){const c=contacts();const i=c.findIndex(x=>x.p===num);if(i>=0)c[i].n=pn;else c.push({n:pn,p:num})}
+  (S.meta.last=S.meta.last||{}).vcFrom=VT.from;
+  const ids=txs.map(x=>x.id);
+  closeSheet();touch({meta:true});
+  toast('اتسجّل تحويل '+fmt(amt)+' ج.م'+(pn?' إلى '+pn:''),()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
+}
+Object.assign(ACT,{
+  vcOpen(){vcOpen()},
+  vPick(el){
+    const c=contacts()[+el.dataset.i];if(!c)return;
+    VT.num=c.p;VT.name=c.n;$('#vNum').value=c.p;$('#vName').value=c.n;vcDyn();
+  },
+  vPurp(el){VT.purpose=el.dataset.v;vcDyn()},
+  vFrom(el){VT.from=el.dataset.id;vcDyn()},
+  vGen(){vcGen()},
+  vBack(){
+    const v=VT;vcOpen();VT=v;
+    $('#vNum').value=v.num;$('#vName').value=v.name;$('#vAmt').value=v.amt;$('#vFee').value=v.fee;vcDyn();
+  },
+  vCopy(){
+    const t=($('#vCode')||{}).textContent||'';
+    try{navigator.clipboard.writeText(t).then(()=>toast('اتنسخ الكود'),()=>toast('انسخه بإيدك'))}catch(e){toast('انسخه بإيدك')}
+  },
+  vDone(){vcDone()},
+  delContact(el){
+    if(!el.dataset.armed){el.dataset.armed='1';el.textContent='تأكيد المسح';setTimeout(()=>{if(el.isConnected){delete el.dataset.armed;el.textContent='مسح'}},4000);return}
+    contacts().splice(+el.dataset.i,1);touch({meta:true});toast('اتمسح الرقم');
+  },
+  recDiff(el){
+    const id=el.dataset.id,sb=(S.meta.smsBal||{})[id];if(!sb)return;
+    const d=Math.round((sb.v-balanceAt(id,sb.t))*100)/100;if(Math.abs(d)<0.005)return;
+    const x={id:gid(),t:sb.t,type:'adj',amt:Math.abs(d),from:d<0?id:null,to:d>0?id:null,person:null,cat:'غير مسجّل',once:false,note:'فرق عن رصيد الرسالة'};
+    S.tx.push(x);touch({});
+    toast('اتسجّل فرق '+fmt(Math.abs(d))+' ج.م',()=>{S.tx=S.tx.filter(y=>y.id!==x.id);touch({})});
+  }
+});
+Object.assign(INP,{
+  vNum(el){VT.num=el.value;const b=$('#vContacts');if(b&&contacts().length)vcDyn()},
+  vName(el){VT.name=el.value},
+  vAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.amt=v},
+  vFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.fee=v}
+});
+
+/* ---------- مطابقة الرصيد مع الرسائل ---------- */
+function balanceAt(id,t){
+  const a=accById(id);let v=a?(+a.open||0):0;
+  S.tx.forEach(x=>{if(x.t>t)return;if(x.to===id)v+=x.amt;if(x.from===id)v-=x.amt});
+  return v;
+}
+function reconHtml(){
+  const sb=S.meta.smsBal||{},ids=Object.keys(sb).filter(id=>accById(id)&&!accById(id).hidden);
+  let h='<div class="sec"><h2>مطابقة الرصيد مع الرسائل</h2></div>';
+  if(!ids.length)return h+'<div class="empty" style="padding:10px">لما تضيف رسايل فيها رصيد، هقارن رصيد كل رسالة بالدفتر وقت وصولها وأقولك فين الفرق.</div>';
+  h+='<div class="list">';
+  ids.forEach(id=>{
+    const r=sb[id],bk=balanceAt(id,r.t),d=Math.round((r.v-bk)*100)/100,ok=Math.abs(d)<0.5;
+    h+='<div class="row" style="flex-wrap:wrap"><div class="mid"><div class="t1">'+esc(accName(id))+'</div><div class="t2">رسالة '+esc(dayLabel(r.t))+' '+timeLabel(r.t)+': '+N(fmt(r.v))+' · الدفتر وقتها: '+N(fmt(bk))+'</div></div>'
+      +(ok?'<div class="amt in">مظبوط</div>':'<div class="amt debt">فرق '+N(fmt(Math.abs(d)))+'</div>')
+      +(ok?'':'<div style="flex-basis:100%;font-size:12.5px;color:var(--muted)">'+(d>0?'دخل حسابك فلوس ما اتسجّلتش':'خرج من حسابك فلوس ما اتسجّلتش')+' <button class="link" data-act="recDiff" data-id="'+esc(id)+'">سجّل الفرق</button></div>')+'</div>';
+  });
+  return h+'</div>';
+}
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
