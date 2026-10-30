@@ -173,7 +173,7 @@ function ready(){
 function handleShare(){
   try{
     const p=new URLSearchParams(location.search),t=(p.get('text')||'')+(p.get('title')&&!p.get('text')?p.get('title'):'');
-    if(t.trim()){ui.tab='sms';ui.sms.text=t;history.replaceState(null,'',location.pathname);runSmsParse()}
+    if(t.trim()){ui.tab='sms';ui.sms.text=t;history.replaceState({t:'sms'},'',location.pathname);runSmsParse()}
   }catch(e){}
 }
 function unsub(){unsubs.forEach(f=>{try{f()}catch(e){}});unsubs=[];loaded=false;metaReady=false;txReady=false;remote=new Map();S.tx=[];S.accounts=[];S.meta=freshMeta()}
@@ -213,10 +213,26 @@ function toast(msg,undo){
   $('#toast').innerHTML='<div><span>'+esc(msg)+'</span>'+(undo?'<button data-act="undo">تراجع</button>':'')+'</div>';
   clearTimeout(toastT);toastT=setTimeout(()=>{$('#toast').innerHTML='';undoFn=null},7000);
 }
-function openSheet(html){
-  $('#sheetRoot').innerHTML='<div class="backdrop" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>'+html+'</div></div>';
+let curBack=null,sheetOpen=false,histSheet=false,skipPop=0,closeT=null;
+function openSheet(html,back){
+  curBack=back||null;
+  const head='<div class="shead">'+(back?'<button class="sbtn" data-act="sheetBack">رجوع ›</button>':'<span></span>')+'<button class="sbtn" data-act="sheetClose" aria-label="إغلاق">✕</button></div>';
+  $('#sheetRoot').innerHTML='<div class="backdrop" data-act="backdrop"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>'+head+html+'</div></div>';
+  clearTimeout(closeT);
+  if(!sheetOpen){sheetOpen=true;if(!histSheet){histSheet=true;try{history.pushState({sheet:1},'')}catch(e){}}}
 }
-function closeSheet(){$('#sheetRoot').innerHTML=''}
+function hideSheet(){$('#sheetRoot').innerHTML='';sheetOpen=false}
+function closeSheet(){
+  hideSheet();
+  if(histSheet){clearTimeout(closeT);closeT=setTimeout(()=>{if(!sheetOpen&&histSheet){histSheet=false;skipPop++;try{history.back()}catch(e){skipPop--}}},0)}
+}
+window.addEventListener('popstate',e=>{
+  if(skipPop>0){skipPop--;return}
+  if(sheetOpen){histSheet=false;const b=curBack;hideSheet();if(b)b();return}
+  histSheet=false;
+  const t=(e.state&&e.state.t)||'home';
+  if(ui.tab!==t){ui.tab=t;render();window.scrollTo(0,0)}
+});
 const btn=(act,label,cls,attrs)=>'<button class="btn '+(cls||'')+'" data-act="'+act+'" '+(attrs||'')+'>'+label+'</button>';
 
 /* ---------- الرئيسية ---------- */
@@ -248,7 +264,7 @@ function vHome(){
   let h='<section class="hero"><div class="lbl">الفلوس اللي معاك دلوقتي</div><div class="big">'+N(fmt(T.cash))+'<small>ج.م</small></div>'
     +'<div class="sub"><div><b>'+N(fmt(T.owedToMe))+'</b><span>ليك عند الناس</span></div><div><b>'+N(fmt(T.iOwe))+'</b><span>عليك للناس</span></div></div>'
     +'<div class="lbl" style="margin-top:10px">الصافي بعد الديون: <b>'+N(fmt(T.net))+'</b> ج.م</div></section>';
-  h+='<div class="qa"><button class="btn" data-act="quick" data-type="exp">مصروف</button><button class="btn" data-act="quick" data-type="inc">دخل</button><button class="btn" data-act="quick" data-type="lend">سلّفت حد</button><button class="btn primary" data-act="vcOpen">تحويل فودافون كاش</button></div>';
+  h+='<div class="qa"><button class="btn" data-act="quick" data-type="exp">مصروف</button><button class="btn" data-act="quick" data-type="inc">دخل</button><button class="btn" data-act="quick" data-type="xfer">تحويل بين حساباتي</button><button class="btn primary" data-act="pickPerson">عملية مع شخص</button></div>';
   if(first)h+='<div class="card" style="margin-bottom:12px"><b>ابدأ من هنا</b><p style="margin:6px 0 0;color:var(--muted);font-size:14px">اضغط على كل حساب تحت واكتب الرصيد اللي فيه فعلًا دلوقتي. بعد كده أي فلوس تدخل أو تطلع، اضغط على الزرار + وسجّلها في ثواني.</p></div>';
   h+='<div class="accs">';
   liveAccs().forEach(a=>{
@@ -328,7 +344,7 @@ function vPeople(){
     return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">'+(p.last?'آخر حركة '+esc(dayLabel(p.last)):'مفيش حركات لسه')+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
   };
   let h='<div class="sec"><h2>الناس والديون</h2></div><div class="btns" style="margin-top:0">'
-    +btn('newDebt','سلّفت حد','','data-type="lend"')+btn('newDebt','استلفت من حد','','data-type="borrow"')+btn('addPerson','+ إضافة شخص','primary')+'</div>';
+    +btn('pickPerson','عملية مع شخص','primary')+btn('addPerson','+ إضافة شخص')+'</div>';
   if(!P.length)h+='<div class="empty">لسه مفيش حد. أول ما تسجّل سلفة هتظهر هنا.</div>';
   if(mine.length)h+='<div class="sec"><h2>ليك عندهم</h2></div><div class="list">'+mine.map(row).join('')+'</div>';
   if(owe.length)h+='<div class="sec"><h2>عليك ليهم</h2></div><div class="list">'+owe.map(row).join('')+'</div>';
@@ -547,7 +563,7 @@ function openAcc(id){
 }
 
 /* ---------- شخص ---------- */
-function openPerson(name){
+function openPersonOld(name){
   const p=people().find(q=>q.name===name);if(!p)return;
   const list=S.tx.filter(x=>x.person===name).sort((a,b)=>b.t-a.t);
   const e=encodeURIComponent(name);
@@ -562,7 +578,7 @@ function openPerson(name){
 
 /* ---------- الأوامر ---------- */
 Object.assign(ACT,{
-  tab(el){ui.tab=el.dataset.tab;closeSheet();render();window.scrollTo(0,0)},
+  tab(el){const t=el.dataset.tab;if(ui.tab!==t&&!histSheet){try{history.pushState({t:t},'')}catch(e){}}ui.tab=t;closeSheet();render();window.scrollTo(0,0)},
   newTx(){newEntry()},
   newDebt(el){newEntry(el.dataset.type)},
   icRepay(el){newEntry('arepay',{from:el.dataset.d,to:el.dataset.c,amt:el.dataset.amt})},
@@ -879,7 +895,7 @@ function vcGen(){
     +'<div class="lbl2">الكود</div><div class="card" dir="ltr" style="margin-top:6px;text-align:center;font-size:20px;font-weight:700;unicode-bidi:isolate" id="vCode"><bdi dir="ltr">'+esc(code)+'</bdi></div>'
     +'<div class="btns"><a class="btn primary" style="text-align:center;text-decoration:none" href="tel:'+esc(code.replace(/#/g,'%23'))+'">افتح الاتصال بالكود</a>'+btn('vCopy','نسخ الكود')+'</div>'
     +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">اتأكد من الرقم والمبلغ قبل ما تضغط اتصال، لأن التحويل مش بيترجّع. فودافون هتطلب منك الرقم السري بتاعك، والتطبيق مش بيشوفه. لو لوحة الاتصال فتحت من غير علامة #، انسخ الكود والصقه بنفسك.</p>'
-    +'<div class="btns" style="margin-top:14px">'+btn('vDone','وصلتني رسالة التأكيد، سجّل التحويل','primary')+btn('vBack','رجوع')+'</div>');
+    +'<div class="btns" style="margin-top:14px">'+btn('vDone','وصلتني رسالة التأكيد، سجّل التحويل','primary')+btn('vBack','رجوع')+'</div>',()=>ACT.vBack());
 }
 function vcDone(){
   const num=normPhone(VT.num),amt=Math.round(parseNum(VT.amt)*100)/100,fee=parseNum(VT.fee),pn=VT.name.trim(),now=Date.now();
@@ -973,28 +989,26 @@ const dm=t=>{const d=new Date(t);return d.getDate()+'/'+(d.getMonth()+1)};
 function debtMsg(name){
   const p=people().find(q=>q.name===name)||{bal:0};
   const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).sort((a,b)=>a.t-b.t);
-  const MAX=8,rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
+  const MAX=6,rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
   let prior=0;older.forEach(x=>prior+=TYPES[x.type].debt*x.amt);prior=Math.round(prior*100)/100;
-  const W={lend:'سلّفتك',repay_in:'سدّدت لي',borrow:'سلّفتني',repay_out:'سدّدتلك'};
-  const L=['أهلًا يا '+name+'،','بعتلك تفاصيل حسابنا لحد النهاردة عشان نفضل مظبوطين:',''];
-  if(older.length&&Math.abs(prior)>0.004)L.push('• الرصيد اللي قبل كده: '+(prior>0?'عليك '+fmt(prior):'ليك عندي '+fmt(-prior))+' جنيه');
-  rows.forEach(x=>L.push('• '+dm(x.t)+': '+W[x.type]+' '+fmt(x.amt)+' جنيه'));
-  if(!rows.length)L.push('• لسه مفيش حركات بينا');
-  L.push('');
-  L.push(p.bal>0.004?'الباقي عليك: '+fmt(p.bal)+' جنيه.':(p.bal<-0.004?'الباقي ليك عندي: '+fmt(-p.bal)+' جنيه.':'حسابنا متصفّي والحمد لله، مفيش بينا حاجة.'));
-  L.push('لو فيه أي فرق قولّي.');
+  const W={lend:'سلف',repay_in:'سداد منك',borrow:'استلاف منك',repay_out:'سداد ليك'};
+  const L=['حسابنا لحد دلوقتي:'];
+  if(older.length&&Math.abs(prior)>0.004)L.push('• قبل كده: '+dsc(prior));
+  rows.forEach(x=>{const o=x.op&&opBy(x.op);L.push('• '+dm(x.t)+': '+(o?o.l:W[x.type])+' '+fmt(x.amt)+' جنيه')});
+  if(!rows.length)L.push('• لسه مفيش حركات');
+  L.push(Math.abs(p.bal)<0.005?'حسابنا متصفّي.':'الباقي '+dsc(p.bal)+'.');
   return L.join('\n');
 }
 let WA=null;
-function waSheet(name,num,intro){
+function waSheet(name,num,intro,msg0){
   const c=contactFor(name);
-  WA={name:name,num:num||(c&&c.p)||'',msg:debtMsg(name)};
+  WA={name:name,num:num||(c&&c.p)||'',msg:(msg0!=null?msg0:debtMsg(name))};
   openSheet('<h3>رسالة واتساب لـ '+esc(name)+'</h3>'
     +(intro?'<div class="ok" style="margin-bottom:6px">'+esc(intro)+'</div>':'')
     +'<div class="field"><label for="waNum">رقم واتساب</label><input type="text" id="waNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(WA.num)+'" data-in="waNum"></div>'
-    +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:250px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
+    +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:170px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
     +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waCopy','نسخ الرسالة')+'</div>'
-    +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>');
+    +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>',()=>openPerson(name));
 }
 function addPersonSheet(){
   openSheet('<h3>إضافة شخص</h3>'
@@ -1014,7 +1028,7 @@ Object.assign(ACT,{
     if(AP.num.trim()&&!okPhone(v))return err('الرقم لازم يكون رقم موبايل مصري من 11 رقم');
     const c=contacts(),i=c.findIndex(x=>x.n===n);
     if(i>=0)c[i].p=v||c[i].p;else c.push({n:n,p:v});
-    closeSheet();touch({meta:true});toast('اتحفظ '+n);
+    touch({meta:true});toast('اتحفظ '+n);openPerson(n);
   },
   waOpen(el){waSheet(decodeURIComponent(el.dataset.p))},
   waSend(){
@@ -1054,6 +1068,12 @@ Object.assign(ACT,{
     const ctx=el.dataset.ctx;
     if(ctx==='ap'&&AP){AP.name=r.name||AP.name;AP.num=r.num||AP.num;$('#apName').value=AP.name;$('#apNum').value=AP.num}
     else if(ctx==='vc'&&VT){VT.name=r.name||VT.name;VT.num=r.num||VT.num;$('#vName').value=VT.name;$('#vNum').value=VT.num;vcDyn();vcNote()}
+    else if(ctx==='newp'){
+      if(!r.name){toast('الجهة دي من غير اسم');return}
+      const cs=contacts(),i=cs.findIndex(k=>k.n===r.name);
+      if(i>=0){if(r.num)cs[i].p=r.num}else cs.push({n:r.name,p:r.num});
+      touch({meta:true});openPerson(r.name);
+    }
     else if(ctx==='entry'&&E){
       if(!r.name){toast('الجهة دي من غير اسم');return}
       E.person=r.name;const cs=contacts(),i=cs.findIndex(k=>k.n===r.name);
@@ -1068,6 +1088,141 @@ Object.assign(ACT,{
     VT.name=name;VT.num=(c&&c.p)||'';VT.purpose=p.bal<-0.004?'repay_out':'lend';
     $('#vName').value=VT.name;$('#vNum').value=VT.num;vcDyn();vcNote();
   }
+});
+
+/* ---------- عمليات الناس (قوالب جاهزة ومتعلّمة) ---------- */
+const OPS=[
+  {g:'أديته',k:'lend_cash',t:'lend',l:'سلف كاش',def:'cash',tm:'تم سلف {المبلغ} جنيه.'},
+  {g:'أديته',k:'lend_vcash',t:'lend',l:'تحويل فودافون كاش',def:'wallet',tm:'تم تحويل فودافون كاش مبلغ {المبلغ} جنيه.',ussd:1},
+  {g:'أديته',k:'lend_net',t:'lend',l:'شحن نت',def:'other',tm:'تم شحن نت بمبلغ {المبلغ} جنيه.'},
+  {g:'أديته',k:'lend_credit',t:'lend',l:'تحويل رصيد',def:'other',tm:'تم تحويل رصيد بمبلغ {المبلغ} جنيه.'},
+  {g:'أديته',k:'lend_fawry',t:'lend',l:'تحويل من فوري',def:'other',tm:'تم تحويل {المبلغ} جنيه من فوري.'},
+  {g:'سدّد لي',k:'in_cash',t:'repay_in',l:'سدّد لي كاش',def:'cash',tm:'تم استلام سداد {المبلغ} جنيه.'},
+  {g:'سدّد لي',k:'in_vcash',t:'repay_in',l:'سدّد لي فودافون كاش',def:'wallet',tm:'تم استلام سداد {المبلغ} جنيه على فودافون كاش.'},
+  {g:'سدّد لي',k:'in_bank',t:'repay_in',l:'سدّد لي على البنك',def:'bank',tm:'تم استلام سداد {المبلغ} جنيه على البنك.'},
+  {g:'استلفت منه وسدّدت له',k:'borrow',t:'borrow',l:'استلفت منه',def:'cash',tm:'تم استلاف {المبلغ} جنيه منك.'},
+  {g:'استلفت منه وسدّدت له',k:'out_cash',t:'repay_out',l:'سدّدت له كاش',def:'cash',tm:'تم سداد {المبلغ} جنيه ليك.'},
+  {g:'استلفت منه وسدّدت له',k:'out_vcash',t:'repay_out',l:'سدّدت له فودافون كاش',def:'wallet',tm:'تم تحويل {المبلغ} جنيه فودافون كاش سداد ليك.'}
+];
+const opBy=k=>OPS.find(o=>o.k===k);
+const opOut=o=>o.t==='lend'||o.t==='repay_out';
+const dsc=b=>b>0.004?'عليك '+fmt(b)+' جنيه':(b<-0.004?'ليك عندي '+fmt(-b)+' جنيه':'متصفّي');
+function balLine(prev,after){
+  const z=v=>Math.abs(v)<0.005;
+  if(z(prev))return z(after)?'حسابنا متصفّي.':'الباقي '+dsc(after)+'.';
+  return 'كان '+dsc(prev)+' قبل كده، '+(z(after)?'يبقى حسابنا متصفّي.':'يبقى الباقي '+dsc(after)+'.');
+}
+const opTmpl=o=>(S.meta.opTmpl||{})[o.k]||o.tm;
+function opDefAcc(o){
+  const L=liveAccs(),ids=L.map(a=>a.id),l=(S.meta.opAcc||{})[o.k];
+  if(l&&ids.indexOf(l)>=0)return l;
+  const a=L.find(x=>x.kind===o.def);return a?a.id:ids[0];
+}
+let OS=null;
+const r2=v=>Math.round(v*100)/100;
+function opLine(){
+  const a=parseNum(OS.amt);
+  return opTmpl(OS.o).split('{المبلغ}').join(a>0?fmt(a):'___');
+}
+function opPrevBal(){const p=people().find(q=>q.name===OS.name);return p?p.bal:0}
+function opMsg(){
+  const a=parseNum(OS.amt),prev=opPrevBal();
+  const line=(OS.line||'').trim()||opLine();
+  if(!(a>0))return line;
+  return line+'\n'+balLine(prev,r2(prev+TYPES[OS.o.t].debt*a));
+}
+function opUpdate(){
+  const pv=$('#oPrev');if(pv)pv.textContent=opMsg();
+  const f=$('#oFlow');if(f){const out=opOut(OS.o);f.textContent=out?accName(OS.acc)+'  ←  '+OS.name:OS.name+'  ←  '+accName(OS.acc)}
+  const c=$('#oCode');if(c){const n=normPhone(OS.num),a=parseNum(OS.amt);c.textContent=(okPhone(n)&&a>0)?'*9*7*'+n+'*'+r2(a)+'#':'اكتب الرقم والمبلغ عشان الكود يظهر'}
+}
+function newOp(name,k){
+  const o=opBy(k),c=contactFor(name);
+  OS={pb:curPB,name:name,o:o,amt:'',acc:opDefAcc(o),fee:'',num:(c&&c.p)||'',edited:false,line:''};
+  OS.line=opLine();renderOp();
+}
+function renderOp(){
+  const o=OS.o,out=opOut(o);
+  const chips=liveAccs().map(a=>'<button class="chip sm'+(OS.acc===a.id?' on':'')+'" data-act="oAcc" data-id="'+esc(a.id)+'">'+esc(a.name)+'</button>').join('');
+  openSheet('<h3>'+esc(o.l)+'</h3><div style="color:var(--muted);font-size:14px">مع <b style="color:var(--fg)">'+esc(OS.name)+'</b></div>'
+    +'<input type="text" id="oAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.amt)+'" data-in="oAmt" aria-label="المبلغ بالجنيه" style="margin-top:10px">'
+    +'<div class="field"><span class="lbl2">'+(out?'بيطلع من حساب':'بيدخل في حساب')+'</span><div class="chips">'+chips+'</div>'
+    +'<div class="card" id="oFlow" style="margin-top:6px;text-align:center;font-weight:600"></div></div>'
+    +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
+    +(out?'<div class="field"><label for="oFee">رسوم العملية (اختياري)</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
+    +'<div class="field"><label for="oLine">صياغة الرسالة (غيّرها وهفتكرها المرة الجاية)</label><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine"></div>'
+    +'<div class="lbl2">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
+    +'<div class="btns">'+btn('oSave','سجّل وجهّز الرسالة','primary')+(o.ussd?btn('oDial','افتح الاتصال بالكود'):'')+'</div>',()=>openPerson(OS.name,OS.pb));
+  opUpdate();
+  setTimeout(()=>{const a=$('#oAmt');if(a)a.focus()},60);
+}
+function opSave(){
+  const amt=r2(parseNum(OS.amt));
+  if(!(amt>0)){toast('اكتب المبلغ الأول');return}
+  const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=Date.now(),out=opOut(o);
+  const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:o.l,op:o.k};
+  const txs=[x],fee=out?parseNum(OS.fee):NaN;
+  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:r2(fee),from:OS.acc,to:null,person:null,cat:'رسوم',once:false,note:'رسوم '+o.l});
+  const cs=contacts(),nv=normPhone(OS.num);let ci=cs.findIndex(k=>k.n===name);
+  if(ci<0){cs.push({n:name,p:okPhone(nv)?nv:''});ci=cs.length-1}else if(okPhone(nv))cs[ci].p=nv;
+  const m=S.meta;m.opAcc=m.opAcc||{};m.opAcc[o.k]=OS.acc;
+  const line=(OS.line||'').trim()||opLine(),def=opTmpl(o).split('{المبلغ}').join(fmt(amt));
+  if(OS.edited&&line!==def){m.opTmpl=m.opTmpl||{};const a=fmt(amt);m.opTmpl[o.k]=line.indexOf(a)>=0?line.split(a).join('{المبلغ}'):line}
+  const msg=line+'\n'+balLine(prev,r2(prev+T.debt*amt)),ids=txs.map(y=>y.id);
+  S.tx=S.tx.concat(txs);
+  touch({meta:true});
+  toast('اتسجّل: '+o.l+' '+fmt(amt)+' ج.م',()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
+  waSheet(name,cs[ci].p,'اتسجّلت العملية. الرسالة جاهزة، اضغط افتح واتساب.',msg);
+}
+let curPB=null;
+function openPerson(name,back){
+  curPB=back||null;
+  const p=people().find(q=>q.name===name)||{name:name,bal:0,last:0},c=contactFor(name),e=encodeURIComponent(name);
+  const list=S.tx.filter(x=>x.person===name).sort((a,b)=>b.t-a.t);
+  const groups=[];OPS.forEach(o=>{if(groups.indexOf(o.g)<0)groups.push(o.g)});
+  let h='<h3>'+esc(name)+'</h3><div class="t2 num" style="color:var(--muted);font-size:13px">'+(c&&c.p?esc(c.p):'مفيش رقم محفوظ')+'</div>'
+    +'<div style="font-size:26px;font-weight:700;margin-block:6px 2px" class="'+(p.bal>0.004?'amt debt':(p.bal<-0.004?'amt out':''))+'">'
+    +(Math.abs(p.bal)<0.005?'<small style="font-size:16px">حسابكم متصفّي</small>':N(fmt(Math.abs(p.bal)))+' <small style="font-size:14px;font-weight:500">ج.م '+(p.bal>0?'عليه ليك':'عليك له')+'</small>')+'</div>';
+  groups.forEach(g=>{
+    h+='<div class="lbl2" style="margin-top:14px">'+esc(g)+'</div><div class="qa" style="margin:6px 0 0">'
+      +OPS.filter(o=>o.g===g).map(o=>'<button class="btn" data-act="opStart" data-k="'+o.k+'" data-p="'+esc(e)+'">'+esc(o.l)+'</button>').join('')+'</div>';
+  });
+  h+='<div class="btns" style="margin-top:14px">'+btn('waOpen','رسالة بتفاصيل الحساب','','data-p="'+esc(e)+'"')+'</div>';
+  if(list.length)h+='<div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
+  openSheet(h,back);
+}
+function pickPersonSheet(){
+  const P=peopleAll().sort((a,b)=>b.last-a.last||a.name.localeCompare(b.name,'ar'));
+  const row=p=>'<button class="row" data-act="openPersonP" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div></div><div class="amt '+(p.bal>0.004?'debt':(p.bal<-0.004?'out':'flat'))+'">'+(Math.abs(p.bal)<0.005?'متصفّي':N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+(p.bal>0?'عليه':'عليك له')+'</span>')+'</div></button>';
+  openSheet('<h3>عملية مع مين؟</h3>'
+    +(P.length?'<div class="list">'+P.map(row).join('')+'</div>':'<div class="empty">لسه مفيش ناس. ضيف أول شخص.</div>')
+    +'<div class="btns">'+btn('addPerson','+ شخص جديد','primary')+(hasPicker()?btn('pickContact','من جهات الاتصال','','data-ctx="newp"'):'')+'</div>');
+}
+Object.assign(ACT,{
+  sheetBack(){if(curBack)curBack()},
+  sheetClose(){closeSheet()},
+  openPersonP(el){openPerson(decodeURIComponent(el.dataset.p),pickPersonSheet)},
+  pickPerson(){pickPersonSheet()},
+  opStart(el){newOp(decodeURIComponent(el.dataset.p),el.dataset.k)},
+  oAcc(el){OS.acc=el.dataset.id;renderOp();const a=$('#oAmt');if(a&&!OS.amt)a.focus()},
+  oSave(){opSave()},
+  oDial(){
+    const n=normPhone(OS.num),a=parseNum(OS.amt);
+    if(!okPhone(n)){toast('اكتب رقم موبايل مصري صحيح');return}
+    if(!(a>0)){toast('اكتب المبلغ');return}
+    const code='*9*7*'+n+'*'+r2(a)+'#',el=document.createElement('a');
+    el.href='tel:'+code.replace(/#/g,'%23');document.body.appendChild(el);el.click();el.remove();
+  }
+});
+Object.assign(INP,{
+  oAmt(el){
+    const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;OS.amt=v;
+    if(!OS.edited){OS.line=opLine();const l=$('#oLine');if(l)l.value=OS.line}
+    opUpdate();
+  },
+  oLine(el){OS.line=el.value;OS.edited=true;opUpdate()},
+  oNum(el){OS.num=el.value;opUpdate()},
+  oFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;OS.fee=v}
 });
 
 /* ---------- الدخول والخروج ---------- */
@@ -1100,5 +1255,6 @@ Object.assign(ACT,{
 Object.assign(INP,{gEmail(el){G.email=el.value},gPass(el){G.pass=el.value}});
 document.addEventListener('keydown',ev=>{if(ev.key==='Enter'&&!$('#gate').hidden&&ev.target.id&&ev.target.id.indexOf('g')===0)ACT.gLogin()});
 if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+try{history.replaceState({t:'home'},'')}catch(e){}
 boot();
 })();
