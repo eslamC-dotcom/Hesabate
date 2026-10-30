@@ -1,0 +1,50 @@
+# دفتر حساباتي
+
+تطبيق حسابات عربي (PWA): حسابات متعددة، تحويلات، ديون، مصاريف طارئة، وتحليل رسائل البنك وفودافون كاش.
+الواجهة على GitHub Pages، والبيانات على Firebase (Firestore + Authentication)، وبيشتغل بدون نت ويتثبّت على التليفون.
+
+## الخطوات (مرة واحدة)
+
+### 1) مشروع Firebase
+1. ادخل https://console.firebase.google.com ← Add project ← اكتب اسم ← كمّل.
+2. **Build ← Authentication ← Get started**، وفعّل **Email/Password** وكمان **Google** لو عايزه.
+3. **Build ← Firestore Database ← Create database** (اختار أقرب منطقة، وابدأ في Production mode).
+4. **Firestore ← Rules**: الصق محتوى ملف `firestore.rules` واضغط Publish.
+5. **Project settings (علامة الترس) ← Your apps ← Web (</>)**: سجّل تطبيق ويب، وانسخ كائن `firebaseConfig`.
+6. الصق القيم في `public/firebase-config.js`.
+
+### 2) GitHub
+1. اعمل Repository جديد (مثلًا `hesabaty`) وارفع كل ملفات المشروع في الفرع `main`.
+2. **Settings ← Pages ← Build and deployment ← Source: GitHub Actions**.
+3. أول ما تعمل push، الـ workflow في `.github/workflows/pages.yml` ينشر الموقع على:
+   `https://<اسمك>.github.io/<اسم-الريبو>/`
+
+### 3) اسمح للدومين في Firebase
+**Authentication ← Settings ← Authorized domains ← Add domain** وضيف `<اسمك>.github.io`.
+من غير الخطوة دي تسجيل الدخول مش هيشتغل على الموقع.
+
+### 4) ثبّته على التليفون
+افتح الرابط من Chrome على أندرويد ← القايمة ← **Install app** (أو Add to Home screen).
+على آيفون من Safari ← Share ← Add to Home Screen.
+
+## بديل: استضافة Firebase بدل GitHub Pages
+```
+npm i -g firebase-tools
+firebase login
+firebase use --add
+firebase deploy --only hosting,firestore:rules
+```
+
+## هيكل البيانات في Firestore
+```
+users/{uid}/meta/main        { v, data: JSON{ accounts[], meta{} }, updated }
+users/{uid}/tx/{txId}        { id, t, type, amt, from, to, person, cat, once, note, src }
+```
+- `accounts`: `{id, name, kind, color, open, hidden}`. الرصيد = الرصيد الافتتاحي + الداخل − الخارج من الحركات.
+- `type`: `exp` مصروف، `inc` دخل، `xfer` تحويل بين حساباتك، `lend`/`repay_in`/`borrow`/`repay_out` ديون الناس، `aloan`/`arepay` ديون بين حساباتك، `adj` تسوية.
+- كل مستخدم بيقرا ويكتب بياناته بس (`firestore.rules`).
+
+## الرسائل
+- لصق الرسائل من الحافظة وتحليلها شغال.
+- لو تطبيق الرسائل عندك بيدعم "مشاركة"، التطبيق بعد التثبيت بيظهر في قايمة المشاركة ويستقبل النص.
+- قراءة الرسائل تلقائيًا بدون أي خطوة محتاجة تطبيق أندرويد أصلي (Capacitor مع صلاحية READ_SMS). ده المرحلة الجاية.
