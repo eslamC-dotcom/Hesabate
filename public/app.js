@@ -320,15 +320,15 @@ function vLog(){
 
 /* ---------- الناس ---------- */
 function vPeople(){
-  const P=people().sort((a,b)=>Math.abs(b.bal)-Math.abs(a.bal)||b.last-a.last);
+  const P=peopleAll().sort((a,b)=>Math.abs(b.bal)-Math.abs(a.bal)||b.last-a.last);
   const mine=P.filter(p=>p.bal>0),owe=P.filter(p=>p.bal<0),done=P.filter(p=>p.bal===0);
   const row=(p)=>{
     const cls=p.bal>0?'debt':(p.bal<0?'out':'flat');
     const txt=p.bal>0?'عليه':(p.bal<0?'عليك له':'متصفّي');
-    return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">آخر حركة '+esc(dayLabel(p.last))+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
+    return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">'+(p.last?'آخر حركة '+esc(dayLabel(p.last)):'مفيش حركات لسه')+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
   };
   let h='<div class="sec"><h2>الناس والديون</h2></div><div class="btns" style="margin-top:0">'
-    +btn('newDebt','سلّفت حد','','data-type="lend"')+btn('newDebt','استلفت من حد','','data-type="borrow"')+'</div>';
+    +btn('newDebt','سلّفت حد','','data-type="lend"')+btn('newDebt','استلفت من حد','','data-type="borrow"')+btn('addPerson','+ إضافة شخص')+'</div>';
   if(!P.length)h+='<div class="empty">لسه مفيش حد. أول ما تسجّل سلفة هتظهر هنا.</div>';
   if(mine.length)h+='<div class="sec"><h2>ليك عندهم</h2></div><div class="list">'+mine.map(row).join('')+'</div>';
   if(owe.length)h+='<div class="sec"><h2>عليك ليهم</h2></div><div class="list">'+owe.map(row).join('')+'</div>';
@@ -549,7 +549,7 @@ function openPerson(name){
   if(p.bal>0)h+=btn('personAct','رجّع لي','primary','data-type="repay_in" data-amt="'+p.bal+'" data-p="'+esc(e)+'"')+btn('personAct','سلّفته كمان','','data-type="lend" data-p="'+esc(e)+'"');
   else if(p.bal<0)h+=btn('personAct','سدّدت له','primary','data-type="repay_out" data-amt="'+(-p.bal)+'" data-p="'+esc(e)+'"')+btn('personAct','استلفت منه كمان','','data-type="borrow" data-p="'+esc(e)+'"');
   else h+=btn('personAct','سلّفته','primary','data-type="lend" data-p="'+esc(e)+'"')+btn('personAct','استلفت منه','','data-type="borrow" data-p="'+esc(e)+'"');
-  h+='</div><div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
+  h+=btn('waOpen','رسالة واتساب بالتفاصيل','','data-p="'+esc(e)+'"')+'</div><div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
   openSheet(h);
 }
 
@@ -838,7 +838,7 @@ function vcOpen(){
     +'<div class="field"><label for="vNum">رقم المستلم</label><input type="text" id="vNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" data-in="vNum"></div>'
     +'<div class="field"><label for="vName">الاسم (اكتبه عشان الرقم يتحفظ)</label><input type="text" id="vName" autocomplete="off" data-in="vName"></div>'
     +'<div class="field"><label for="vAmt">المبلغ بالجنيه</label><input type="text" id="vAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vAmt"></div>'
-    +'<div id="vDyn"></div>'
+    +'<div id="vDyn"></div><div id="vNote"></div>'
     +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div>'
     +'<div id="vErr"></div>'
     +'<div class="btns">'+btn('vGen','جهّز الكود','primary')+'</div>');
@@ -881,19 +881,21 @@ function vcDone(){
   txs.push(base);
   if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش'});
   S.tx=S.tx.concat(txs);
-  if(pn){const c=contacts();const i=c.findIndex(x=>x.p===num);if(i>=0)c[i].n=pn;else c.push({n:pn,p:num})}
+  if(pn){const c=contacts();const i=c.findIndex(x=>x.p===num||x.n===pn);if(i>=0){c[i].n=pn;c[i].p=num}else c.push({n:pn,p:num})}
   (S.meta.last=S.meta.last||{}).vcFrom=VT.from;
   const ids=txs.map(x=>x.id);
-  closeSheet();touch({meta:true});
+  const purpose=VT.purpose;
+  touch({meta:true});
   toast('اتسجّل تحويل '+fmt(amt)+' ج.م'+(pn?' إلى '+pn:''),()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
+  if(purpose!=='exp'&&pn)waSheet(pn,num,'اتسجّل التحويل وحسابه اتحدّث. تبعت له رسالة بالتفاصيل؟');else closeSheet();
 }
 Object.assign(ACT,{
   vcOpen(){vcOpen()},
   vPick(el){
     const c=contacts()[+el.dataset.i];if(!c)return;
-    VT.num=c.p;VT.name=c.n;$('#vNum').value=c.p;$('#vName').value=c.n;vcDyn();
+    VT.num=c.p;VT.name=c.n;$('#vNum').value=c.p;$('#vName').value=c.n;vcDyn();vcNote();
   },
-  vPurp(el){VT.purpose=el.dataset.v;vcDyn()},
+  vPurp(el){VT.purpose=el.dataset.v;vcDyn();vcNote()},
   vFrom(el){VT.from=el.dataset.id;vcDyn()},
   vGen(){vcGen()},
   vBack(){
@@ -919,8 +921,8 @@ Object.assign(ACT,{
 });
 Object.assign(INP,{
   vNum(el){VT.num=el.value;const b=$('#vContacts');if(b&&contacts().length)vcDyn()},
-  vName(el){VT.name=el.value},
-  vAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.amt=v},
+  vName(el){VT.name=el.value;vcNote()},
+  vAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.amt=v;vcNote()},
   vFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.fee=v}
 });
 
@@ -943,6 +945,89 @@ function reconHtml(){
   });
   return h+'</div>';
 }
+
+/* ---------- الناس ورسائل واتساب ---------- */
+const contactFor=n=>(S.meta.contacts||[]).find(c=>c.n===n)||null;
+function peopleAll(){
+  const P=people(),h={};P.forEach(p=>h[p.name]=1);
+  (S.meta.contacts||[]).forEach(c=>{if(!h[c.n]){h[c.n]=1;P.push({name:c.n,bal:0,last:0})}});
+  return P;
+}
+const balTxt=b=>b>0.004?'عليه لك '+fmt(b)+' ج.م':(b<-0.004?'عليك له '+fmt(-b)+' ج.م':'متصفّي');
+function vcNote(){
+  const b=$('#vNote');if(!b||!VT)return;
+  const nm=VT.name.trim(),p=nm&&people().find(q=>q.name===nm),amt=parseNum(VT.amt);
+  if(!p||VT.purpose==='exp'){b.innerHTML='';return}
+  const after=isNaN(amt)?p.bal:Math.round((p.bal+(VT.purpose==='lend'?amt:-amt))*100)/100;
+  b.innerHTML='<div class="warn" style="margin-top:6px">قبل التحويل: '+esc(balTxt(p.bal))+(isNaN(amt)?'':'، وبعده: '+esc(balTxt(after)))+'</div>';
+}
+const dm=t=>{const d=new Date(t);return d.getDate()+'/'+(d.getMonth()+1)};
+function debtMsg(name){
+  const p=people().find(q=>q.name===name)||{bal:0};
+  const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).sort((a,b)=>a.t-b.t);
+  const MAX=8,rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
+  let prior=0;older.forEach(x=>prior+=TYPES[x.type].debt*x.amt);prior=Math.round(prior*100)/100;
+  const W={lend:'سلّفتك',repay_in:'سدّدت لي',borrow:'سلّفتني',repay_out:'سدّدتلك'};
+  const L=['أهلًا يا '+name+'،','بعتلك تفاصيل حسابنا لحد النهاردة عشان نفضل مظبوطين:',''];
+  if(older.length&&Math.abs(prior)>0.004)L.push('• الرصيد اللي قبل كده: '+(prior>0?'عليك '+fmt(prior):'ليك عندي '+fmt(-prior))+' جنيه');
+  rows.forEach(x=>L.push('• '+dm(x.t)+': '+W[x.type]+' '+fmt(x.amt)+' جنيه'));
+  if(!rows.length)L.push('• لسه مفيش حركات بينا');
+  L.push('');
+  L.push(p.bal>0.004?'الباقي عليك: '+fmt(p.bal)+' جنيه.':(p.bal<-0.004?'الباقي ليك عندي: '+fmt(-p.bal)+' جنيه.':'حسابنا متصفّي والحمد لله، مفيش بينا حاجة.'));
+  L.push('لو فيه أي فرق قولّي.');
+  return L.join('\n');
+}
+let WA=null;
+function waSheet(name,num,intro){
+  const c=contactFor(name);
+  WA={name:name,num:num||(c&&c.p)||'',msg:debtMsg(name)};
+  openSheet('<h3>رسالة واتساب لـ '+esc(name)+'</h3>'
+    +(intro?'<div class="ok" style="margin-bottom:6px">'+esc(intro)+'</div>':'')
+    +'<div class="field"><label for="waNum">رقم واتساب</label><input type="text" id="waNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(WA.num)+'" data-in="waNum"></div>'
+    +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:250px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
+    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waCopy','نسخ الرسالة')+'</div>'
+    +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>');
+}
+function addPersonSheet(){
+  openSheet('<h3>إضافة شخص</h3>'
+    +'<div class="field"><label for="apName">الاسم</label><input type="text" id="apName" autocomplete="off" data-in="apName"></div>'
+    +'<div class="field"><label for="apNum">رقم الموبايل (فودافون كاش وواتساب)</label><input type="text" id="apNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" data-in="apNum"></div>'
+    +'<div id="apErr"></div><div class="btns">'+btn('apSave','حفظ','primary')+'</div>');
+  AP={name:'',num:''};
+}
+let AP=null;
+Object.assign(ACT,{
+  addPerson(){addPersonSheet()},
+  apSave(){
+    const n=AP.name.trim(),v=normPhone(AP.num),e=$('#apErr');
+    const err=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
+    if(!n)return err('اكتب الاسم');
+    if(AP.num.trim()&&!okPhone(v))return err('الرقم لازم يكون رقم موبايل مصري من 11 رقم');
+    const c=contacts(),i=c.findIndex(x=>x.n===n);
+    if(i>=0)c[i].p=v||c[i].p;else c.push({n:n,p:v});
+    closeSheet();touch({meta:true});toast('اتحفظ '+n);
+  },
+  waOpen(el){waSheet(decodeURIComponent(el.dataset.p))},
+  waSend(){
+    const v=normPhone(WA.num),e=$('#waErr');
+    if(!okPhone(v)){e.innerHTML='<div class="warn" style="margin-top:6px">اكتب رقم موبايل مصري صحيح من 11 رقم</div>';return}
+    if(!(WA.msg||'').trim()){e.innerHTML='<div class="warn" style="margin-top:6px">الرسالة فاضية</div>';return}
+    const c=contacts(),i=c.findIndex(x=>x.n===WA.name);
+    if(i>=0){if(c[i].p!==v){c[i].p=v;touch({meta:true})}}else{c.push({n:WA.name,p:v});touch({meta:true})}
+    const a=document.createElement('a');
+    a.href='https://wa.me/2'+v+'?text='+encodeURIComponent(WA.msg);a.target='_blank';a.rel='noopener';
+    document.body.appendChild(a);a.click();a.remove();
+  },
+  waCopy(){
+    try{navigator.clipboard.writeText(WA.msg).then(()=>toast('اتنسخت الرسالة'),()=>toast('انسخها بإيدك'))}catch(e){toast('انسخها بإيدك')}
+  }
+});
+Object.assign(INP,{
+  waNum(el){WA.num=el.value},
+  waMsg(el){WA.msg=el.value},
+  apName(el){AP.name=el.value},
+  apNum(el){AP.num=el.value}
+});
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
