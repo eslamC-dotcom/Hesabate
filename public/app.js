@@ -1701,6 +1701,13 @@ ACT.pickContact=async function(el,ev){
   return _pickC(el,ev);
 };
 
+/* ---------- زر تحويل فودافون كاش ظاهر في الرئيسية والناس ---------- */
+const VCBTN='<div class="btns" style="margin:0 0 12px"><button class="btn primary" data-act="vcOpen" style="width:100%">تحويل فودافون كاش (من جوه التطبيق)</button></div>';
+const _vHome=vHome;
+vHome=function(){const h=_vHome();return h.indexOf('<div class="qa">')>=0?h.replace('<div class="qa">',VCBTN+'<div class="qa">'):VCBTN+h};
+const _vPeople=vPeople;
+vPeople=function(){return VCBTN+_vPeople()};
+
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
   if(G.busy)return;
