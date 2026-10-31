@@ -105,6 +105,12 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        if (web != null) web.evaluateJavascript("window.onAppResume&&window.onAppResume()", null);
+    }
+
+    @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
         if (code == REQ_SMS) {
@@ -121,6 +127,15 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean hasSmsPermission() {
             return hasSms();
+        }
+
+        @JavascriptInterface
+        public void openAppSettings() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()));
+                startActivity(i);
+            });
         }
 
         @JavascriptInterface

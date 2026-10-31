@@ -721,7 +721,7 @@ function runSmsParse(){
   const blocks=splitMsgs(ui.sms.text||''),items=[];let skipped=0;
   blocks.forEach(raw=>{
     const p=parseMsg(raw);if(!p){skipped++;return}
-    const h=hashStr(p.m),dup=(S.meta.seen||[]).indexOf(h)>=0;
+    const h=p.opid?hashStr('op'+p.opid):hashStr(p.m),dup=(S.meta.seen||[]).indexOf(h)>=0;
     const acc=guessAcc(p.m),others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
     items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:'',
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:dup,on:!dup});
@@ -779,6 +779,7 @@ function addSmsItems(auto){
     const x={id:gid(),t:it.t,type:it.type,amt:it.amt,from:T.from?it.acc:null,to:T.to?(T.from?it.acc2:it.acc):null,
       person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms',sms:it.h};
     S.tx.push(x);months.push(x.t);
+    if(it.fee>0&&x.from)S.tx.push({id:gid(),t:x.t,type:'exp',amt:it.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
     S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-2000);
     if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{};if(!sb[it.acc]||sb[it.acc].t<=it.t)sb[it.acc]={v:it.bal,t:it.t}}
     if(it.bal!=null&&(!lastBal[it.acc]||lastBal[it.acc].t<=it.t))lastBal[it.acc]={t:it.t,v:it.bal};
@@ -909,11 +910,11 @@ function vcGen(){
 }
 function vcDone(){
   const num=normPhone(VT.num),amt=Math.round(parseNum(VT.amt)*100)/100,fee=parseNum(VT.fee),pn=VT.name.trim(),now=Date.now();
-  const txs=[],base={id:gid(),t:now,amt:amt,from:VT.from,to:null,person:null,cat:null,once:false,note:(pn?pn+' · ':'')+num};
+  const txs=[],base={id:gid(),t:now,amt:amt,from:VT.from,to:null,person:null,cat:null,once:false,note:(pn?pn+' · ':'')+num,num:num};
   if(VT.purpose==='exp'){base.type='exp';base.cat='تحويل فودافون كاش'}
   else{base.type=VT.purpose;base.person=pn}
   txs.push(base);
-  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش'});
+  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:base.id});
   S.tx=S.tx.concat(txs);
   if(pn){const c=contacts();const i=c.findIndex(x=>x.p===num||x.n===pn);if(i>=0){c[i].n=pn;c[i].p=num}else c.push({n:pn,p:num})}
   (S.meta.last=S.meta.last||{}).vcFrom=VT.from;
@@ -1275,13 +1276,13 @@ function smsSync(){
     const p=parseMsg(m.body,m.date);if(!p)return;
     if(p.dir==null&&p.bal==null)return;
     const snd=sndList().find(s=>s.a===m.address),acc=(snd&&accById(snd.acc)&&!accById(snd.acc).hidden)?snd.acc:guessAcc(p.m);
-    const h=hashStr(p.m+'|'+m.date);
+    const h=p.opid?hashStr('op'+p.opid):hashStr(p.m+'|'+m.date);
     if(p.bal!=null&&(!sb[acc]||sb[acc].t<=m.date)&&(!sb[acc]||sb[acc].v!==p.bal||sb[acc].t!==m.date)){sb[acc]={v:p.bal,t:m.date};changed=true}
     if(seen.has(h))return;
     const mt=findMatch(p,acc);
-    if(mt){mt.x[mt.s]=h;mt.x.t=m.date;S.meta.seen.push(h);seen.add(h);A.matched++;changed=true;return}
+    if(mt){ensureFee(mt.x,p,acc);mt.x[mt.s]=h;mt.x.t=m.date;S.meta.seen.push(h);seen.add(h);A.matched++;changed=true;return}
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
-    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:'',
+    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,fee:p.fee||0,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
   });
   A.items=pend;A.last=Date.now();
@@ -1373,6 +1374,140 @@ Object.assign(INP,{
   spAcc(el){SP.rows[+el.dataset.i].acc=el.value}
 });
 const SL=el=>el.dataset.auto?ui.sms.auto.items:ui.sms.items;
+
+/* ---------- رسائل فودافون كاش: تقسيم، رسوم، مطابقة ---------- */
+const PH_RE=/(?<!\d)(01[0125]\d{8})(?!\d)/;
+function parseVfDate(m){
+  const pad=(a,mo,d,hh,mi)=>{
+    const t=new Date(a,mo-1,d,hh,mi).getTime();
+    return (mo>=1&&mo<=12&&d>=1&&d<=31&&isFinite(t)&&t<=Date.now()+864e5)?t:null;
+  };
+  // "18:13 26-10-29"  (الوقت ثم سنة-شهر-يوم)
+  let r=m.match(/(\d{1,2}):(\d{2})\s*(\d{2})-(\d{1,2})-(\d{1,2})(?!\d)/);
+  if(r){
+    const hh=+r[1],mi=+r[2],a=+r[3],b=+r[4],c=+r[5];
+    return pad(2000+a,b,c,hh,mi)||pad(2000+c,b,a,hh,mi);
+  }
+  // "29-10-26 18:13" أو "2026-10-29 18:13"
+  r=m.match(/(\d{2,4})-(\d{1,2})-(\d{1,2})\s*(\d{1,2}):(\d{2})/);
+  if(r){
+    let a=+r[1],b=+r[2],c=+r[3];const hh=+r[4],mi=+r[5];
+    if(a>=1000)return pad(a,b,c,hh,mi);
+    return pad(2000+c,b,a,hh,mi)||pad(2000+a,b,c,hh,mi);
+  }
+  return null;
+}
+const _parseOld=parseMsg;
+parseMsg=function(raw,dateMs){
+  const p=_parseOld(raw,dateMs);if(!p)return p;
+  const m=p.m,om=m.match(/رقم\s*العملية\s*:?\s*(\d{6,})/);
+  p.opid=om?om[1]:null;
+  const mm=p.opid?m.replace(p.opid,' '):m;
+  const ex=m.match(new RegExp('(?:تحويل|استلام\\s*مبلغ|مبلغ)\\s*'+NUMR+'\\s*(?:جنيه|جنية|ج\\.م|EGP)','i'));
+  if(ex)p.amt=parseFloat(ex[1].replace(/,/g,''));
+  const fm=m.match(new RegExp('(?:مصاريف|رسوم)\\s*(?:ال)?خدم[ةه]\\s*:?\\s*'+NUMR,'i'));
+  p.fee=fm?parseFloat(fm[1].replace(/,/g,'')):0;
+  if(/تم\s+تحويل/.test(m))p.dir='out';else if(/تم\s+استلام|استلام\s+مبلغ/.test(m))p.dir='in';
+  const ph=mm.match(PH_RE);p.num=ph?ph[1]:null;
+  const nm=m.match(/(?:بإسم|باسم|بأسم)\s+(.+?)\s+(?:على|علي|الى|إلى)\s/);
+  p.name=nm?nm[1].trim():'';
+  if(p.num)p.who=(p.name?p.name+' ':'')+p.num;
+  const vt=parseVfDate(m);p.hasDate=vt!=null;
+  if(vt!=null&&!dateMs)p.t=vt;
+  return p;
+};
+const _splitOld=splitMsgs;
+splitMsgs=function(t){
+  t=String(t||'').replace(/\r/g,'').replace(/(\S)[ \t]+(?=تم\s+(?:تحويل|استلام)\s+(?:مبلغ\s*)?[\d٠-٩])/g,'$1\n');
+  const START=/^\s*تم\s+(?:تحويل|استلام|ايداع|إيداع|سحب|دفع|شحن|خصم|اضافة|إضافة|سداد|استرداد)/;
+  const out=[];
+  t.split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean).forEach(b=>{
+    let cur=[];
+    b.split('\n').forEach(l=>{
+      if(START.test(l)&&cur.some(x=>START.test(x))){out.push(cur.join('\n'));cur=[]}
+      cur.push(l);
+    });
+    if(cur.length)out.push(cur.join('\n'));
+  });
+  if(out.length===1&&!START.test(out[0]))return _splitOld(t);
+  return out;
+};
+function knownName(p){
+  const c=p&&p.num&&(S.meta.contacts||[]).find(k=>k.p===p.num);
+  return c?c.n:((p&&p.name)||'');
+}
+function ensureFee(x,p,acc){
+  if(!(p.fee>0)||!x.from)return;
+  if(S.tx.some(y=>y.feeOf===x.id))return;
+  S.tx.push({id:gid(),t:p.hasDate||p.t?p.t:x.t,type:'exp',amt:p.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
+}
+findMatch=function(p,acc){
+  let best=null,bs=null,bscore=1e18;
+  S.tx.forEach(x=>{
+    if(Math.abs(x.amt-p.amt)>0.005||x.feeOf)return;
+    const dt=Math.abs(x.t-p.t);if(dt>12*36e5)return;
+    let numOk=false;
+    if(p.num){
+      const xn=x.num||((x.note||'').match(PH_RE)||[])[1];
+      if(xn&&xn!==p.num)return;
+      numOk=!!xn;
+    }
+    let s=null;
+    if(p.dir==='out'||p.dir==null){if(x.from===acc&&!x.so)s='so'}
+    if(!s&&(p.dir==='in'||p.dir==null)){if(x.to===acc&&!x.si)s='si'}
+    if(!s)return;
+    const score=dt-(numOk?1e10:0);
+    if(score<bscore){bscore=score;best=x;bs=s}
+  });
+  return best?{x:best,s:bs}:null;
+};
+runSmsParse=function(){
+  const blocks=splitMsgs(ui.sms.text||''),items=[];
+  let skipped=0,matched=0,dups=0,changed=false;
+  const seen=new Set(S.meta.seen||[]),sb=S.meta.smsBal=S.meta.smsBal||{};
+  S.meta.seen=S.meta.seen||[];
+  blocks.forEach(raw=>{
+    const p=parseMsg(raw);if(!p){skipped++;return}
+    const h=p.opid?hashStr('op'+p.opid):hashStr(p.m),acc=guessAcc(p.m);
+    if(p.bal!=null&&p.hasDate&&(!sb[acc]||sb[acc].t<=p.t)&&(!sb[acc]||sb[acc].v!==p.bal||sb[acc].t!==p.t)){sb[acc]={v:p.bal,t:p.t};changed=true}
+    if(seen.has(h)){dups++;return}
+    const mt=findMatch(p,acc);
+    if(mt){
+      ensureFee(mt.x,p,acc);mt.x[mt.s]=h;if(p.hasDate)mt.x.t=p.t;
+      S.meta.seen.push(h);seen.add(h);matched++;changed=true;return;
+    }
+    const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
+    items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
+      note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
+  });
+  ui.sms.items=items;ui.sms.skipped=skipped;
+  const L=[];
+  if(matched)L.push(N(matched)+' رسالة اتطابقت مع تحويلات مسجّلة في الدفتر وماتضافتش تاني.');
+  if(dups)L.push(N(dups)+' رسالة كانت اتسجّلت قبل كده فاتخطيتها.');
+  ui.sms.report=L.length?{title:'نتيجة التحليل',lines:L}:null;
+  if(changed)touch({meta:true});
+  render();
+};
+
+/* ---------- إذن الرسائل في تطبيق الأندرويد ---------- */
+const permGuide=()=>'<div class="card" style="margin-bottom:10px;font-size:14px"><b>لو التليفون مش بيدّي الإذن</b>'
+  +'<ol style="margin:6px 0 0;padding-inline-start:20px;line-height:1.9">'
+  +'<li>اضغط الزر تحت علشان تفتح إعدادات التطبيق.</li>'
+  +'<li>اضغط النقط التلاتة فوق على الشمال، واختار <b>السماح بالإعدادات المقيّدة</b> (Allow restricted settings). الخيار ده بيظهر بس بعد ما تحاول تدّي الإذن مرة.</li>'
+  +'<li>ارجع واختار <b>الأذونات</b> ثم <b>الرسائل SMS</b> ثم <b>السماح</b>.</li>'
+  +'<li>ارجع للتطبيق، هيتعرف على الإذن لوحده.</li></ol>'
+  +'<div class="btns" style="margin-top:8px">'+btn('smsSettings','افتح إعدادات التطبيق','primary')+'</div></div>';
+const _autoHtml=autoHtml;
+autoHtml=function(){
+  const h=_autoHtml();
+  return (smsAvailable()&&!smsOn())?h+permGuide():h;
+};
+ACT.smsSettings=function(){try{ABR().openAppSettings()}catch(e){toast('افتح إعدادات التليفون ← التطبيقات ← دفتر حساباتي')}};
+window.onSmsPermission=function(g){
+  if(g){toast('اتفعّلت قراءة الرسائل');render()}
+  else openSheet('<h3>الإذن لسه ما اتفعّلش</h3>'+permGuide().replace('class="card" style="margin-bottom:10px;font-size:14px"','style="font-size:14px"'));
+};
+window.onAppResume=function(){try{if(loaded){render();autoSync()}}catch(e){}};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
