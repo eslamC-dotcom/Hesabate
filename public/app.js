@@ -1501,7 +1501,8 @@ runSmsParse=function(){
   const L=[];
   if(matched)L.push(N(matched)+' رسالة اتطابقت مع تحويلات مسجّلة في الدفتر وماتضافتش تاني.');
   if(dups)L.push(N(dups)+' رسالة كانت اتسجّلت قبل كده فاتخطيتها.');
-  ui.sms.report=L.length?{title:'نتيجة التحليل',lines:L}:null;
+  L.unshift(N(blocks.length)+' رسالة اتقرأت: '+N(items.length)+' للمراجعة'+(skipped?'، واتخطّيت '+N(skipped)+' مفيهاش مبلغ':'')+'.');
+  ui.sms.report={title:'نتيجة التحليل',lines:L};
   if(changed)touch({meta:true});
   render();
 };
@@ -1720,6 +1721,19 @@ const _vHome=vHome;
 vHome=function(){const h=_vHome();return h.indexOf('<div class="qa">')>=0?h.replace('<div class="qa">',VCBTN+'<div class="qa">'):VCBTN+h};
 const _vPeople=vPeople;
 vPeople=function(){return VCBTN+_vPeople()};
+
+/* ---------- تأكيد واضح بعد الإضافة ---------- */
+const _addSms=addSmsItems;
+addSmsItems=function(auto){
+  const src=auto?(ui.sms.auto&&ui.sms.auto.items):ui.sms.items,its=(src||[]).filter(i=>i.on),before=S.tx.length;
+  _addSms(auto);
+  if(S.tx.length>before&&ui.sms.report){
+    const lines=its.map(it=>{const T=TYPES[it.type],f=flowEnds(it.type,it.acc,T.from?it.acc2:it.acc,it.person);return N(fmt(it.amt))+' ج.م: '+esc(f.L)+' ← '+esc(f.R)});
+    ui.sms.report.title='اتضافت '+its.length+' حركة';
+    ui.sms.report.lines=lines.concat(ui.sms.report.lines);
+    render();
+  }
+};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
