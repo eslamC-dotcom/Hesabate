@@ -1195,6 +1195,7 @@ function openPerson(name,back){
   const list=S.tx.filter(x=>x.person===name).sort((a,b)=>b.t-a.t);
   const groups=[];OPS.forEach(o=>{if(groups.indexOf(o.g)<0)groups.push(o.g)});
   let h='<h3>'+esc(name)+'</h3><div class="t2 num" style="color:var(--muted);font-size:13px">'+(c&&c.p?esc(c.p):'مفيش رقم محفوظ')+'</div>'
+    +'<div class="btns" style="margin:8px 0 0">'+btn('personEdit','تعديل الاسم والرقم','','data-p="'+esc(e)+'"')+btn('personDel','حذف','danger','data-p="'+esc(e)+'"')+'</div>'
     +'<div style="font-size:26px;font-weight:700;margin-block:6px 2px" class="'+(p.bal>0.004?'amt debt':(p.bal<-0.004?'amt out':''))+'">'
     +(Math.abs(p.bal)<0.005?'<small style="font-size:16px">حسابكم متصفّي</small>':N(fmt(Math.abs(p.bal)))+' <small style="font-size:14px;font-weight:500">ج.م '+(p.bal>0?'عليه ليك':'عليك له')+'</small>')+'</div>';
   groups.forEach(g=>{
@@ -1644,6 +1645,49 @@ guessAcc=function(m){
   }
   return g;
 };
+
+/* ---------- تعديل وحذف شخص ---------- */
+let PE=null;
+function personEditSheet(name){
+  const c=contactFor(name);
+  PE={old:name,name:name,num:(c&&c.p)||''};
+  openSheet('<h3>تعديل بيانات الشخص</h3>'
+    +'<div class="field"><label for="peName">الاسم</label><input type="text" id="peName" autocomplete="off" value="'+esc(PE.name)+'" data-in="peName"></div>'
+    +'<div class="field"><label for="peNum">رقم الموبايل (فودافون كاش وواتساب)</label><input type="text" id="peNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(PE.num)+'" data-in="peNum"></div>'
+    +'<div style="font-size:13px;color:var(--muted)">لو غيّرت الاسم، بيتغيّر في كل حركاته القديمة وحسابه بيفضل زي ما هو.</div>'
+    +'<div id="peErr"></div><div class="btns">'+btn('peSave','حفظ','primary')+'</div>',()=>openPerson(name));
+}
+Object.assign(ACT,{
+  personEdit(el){personEditSheet(decodeURIComponent(el.dataset.p))},
+  peSave(){
+    const nn=PE.name.trim(),v=normPhone(PE.num),e=$('#peErr');
+    const err=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
+    if(!nn)return err('اكتب الاسم');
+    if(PE.num.trim()&&!okPhone(v))return err('الرقم لازم يكون رقم موبايل مصري من 11 رقم');
+    if(nn!==PE.old&&peopleAll().some(p=>p.name===nn))return err('في شخص بنفس الاسم ده، اختار اسم تاني');
+    S.tx.forEach(x=>{if(x.person===PE.old)x.person=nn});
+    const cs=contacts(),i=cs.findIndex(k=>k.n===PE.old);
+    if(i>=0){cs[i].n=nn;cs[i].p=v}else cs.push({n:nn,p:v});
+    touch({meta:true});toast('اتحفظ التعديل');openPerson(nn);
+  },
+  personDel(el){
+    const name=decodeURIComponent(el.dataset.p),n=S.tx.filter(x=>x.person===name).length,p=people().find(q=>q.name===name);
+    openSheet('<h3>حذف '+esc(name)+'</h3>'
+      +(n?'<div class="warn">عنده '+N(n)+' حركة'+(p&&Math.abs(p.bal)>0.004?' وحسابه '+esc(balTxt(p.bal)):'')+'. لو مسحته هتتمسح كل حركاته وأرصدة حساباتك هترجع لما كانت قبلها.</div>'
+        :'<div style="font-size:14px;color:var(--muted)">مفيش له حركات، هيتمسح من الأرقام المحفوظة بس.</div>')
+      +'<div class="btns">'+btn('personDelGo',n?'امسحه مع حركاته':'امسحه','danger','data-p="'+esc(encodeURIComponent(name))+'"')+'</div>',()=>openPerson(name));
+  },
+  personDelGo(el){
+    const name=decodeURIComponent(el.dataset.p);
+    if(S.tx.some(x=>x.person===name)&&!el.dataset.armed){el.dataset.armed='1';el.textContent='اضغط تاني للتأكيد';return}
+    const oldTx=S.tx.filter(x=>x.person===name),cs=contacts(),oldC=cs.filter(k=>k.n===name);
+    S.tx=S.tx.filter(x=>x.person!==name);
+    S.meta.contacts=cs.filter(k=>k.n!==name);
+    closeSheet();touch({meta:true});
+    toast('اتمسح '+name,()=>{S.tx=S.tx.concat(oldTx);S.meta.contacts=contacts().concat(oldC);touch({meta:true})});
+  }
+});
+Object.assign(INP,{peName(el){PE.name=el.value},peNum(el){PE.num=el.value}});
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
