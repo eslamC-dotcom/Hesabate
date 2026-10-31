@@ -781,6 +781,8 @@ function addSmsItems(auto){
       person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms',sms:it.h};
     S.tx.push(x);months.push(x.t);
     if(it.last4){const sa=x.type==='xfer'?(it.dir==='in'?x.to:x.from):(x.from||x.to);if(sa)(S.meta.acct4=S.meta.acct4||{})[it.last4]=sa}
+    if(it.op)x.op=it.op;
+    if(it.num&&x.person)(S.meta.numOp=S.meta.numOp||{})[(it.dir||'out')+'|'+it.num]={type:x.type,op:x.op||'',person:x.person};
     learnPair(it.dir||(T.to&&!T.from?'in':'out'),it.sacc||it.acc,x);
     if(it.fee>0&&x.from)S.tx.push({id:gid(),t:x.t,type:'exp',amt:it.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
     S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-2000);
@@ -1133,6 +1135,7 @@ Object.assign(ACT,{
 const OPS=[
   {g:'أديته',k:'lend_cash',t:'lend',l:'سلف كاش',def:'cash',tm:'تم سلف {المبلغ} جنيه.'},
   {g:'أديته',k:'lend_vcash',t:'lend',l:'تحويل فودافون كاش',def:'wallet',tm:'تم تحويل فودافون كاش مبلغ {المبلغ} جنيه.',ussd:1},
+  {g:'أديته',k:'lend_elec',t:'lend',l:'شحن كهرباء',def:'wallet',tm:'تم شحن كهرباء بمبلغ {المبلغ} جنيه.'},
   {g:'أديته',k:'lend_net',t:'lend',l:'شحن نت',def:'other',tm:'تم شحن نت بمبلغ {المبلغ} جنيه.'},
   {g:'أديته',k:'lend_credit',t:'lend',l:'تحويل رصيد',def:'other',tm:'تم تحويل رصيد بمبلغ {المبلغ} جنيه.'},
   {g:'أديته',k:'lend_fawry',t:'lend',l:'تحويل من فوري',def:'other',tm:'تم تحويل {المبلغ} جنيه من فوري.'},
@@ -1311,7 +1314,7 @@ function smsSync(){
     const mt=findMatch(p,acc);
     if(mt){ensureFee(mt.x,p,acc);mt.x[mt.s]=h;mt.x.t=m.date;S.meta.seen.push(h);seen.add(h);A.matched++;changed=true;return}
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
-    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,fee:p.fee||0,last4:p.last4||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
+    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,fee:p.fee||0,last4:p.last4||'',num:p.num||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
   });
   A.items=pend;A.last=Date.now();
@@ -1506,7 +1509,7 @@ runSmsParse=function(){
       S.meta.seen.push(h);seen.add(h);matched++;changed=true;return;
     }
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
-    items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,last4:p.last4||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
+    items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,last4:p.last4||'',num:p.num||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
   });
   ui.sms.items=items;ui.sms.skipped=skipped;
@@ -1594,19 +1597,24 @@ ACT.eToXfer=function(){
 
 /* ---------- كارت الرسالة ---------- */
 smsItemHtml=function(it,i,auto){
-  if(!it.init){it.init=1;it.sacc=it.sacc||it.acc;const t=suggestType(it);if(t&&t!==it.type&&TYPES[t])setItemType(it,t)}
+  if(!it.init){
+    it.init=1;it.sacc=it.sacc||it.acc;
+    const lm=it.num&&(S.meta.numOp||{})[(it.dir||'out')+'|'+it.num];
+    if(lm&&TYPES[lm.type]){setItemType(it,lm.type);it.person=lm.person||it.person;if(lm.op&&opBy(lm.op)){it.op=lm.op;it.note=opBy(lm.op).l+' · '+it.num}}
+    else{const t=suggestType(it);if(t&&t!==it.type&&TYPES[t])setItemType(it,t)}
+  }
   const AU=auto?' data-auto="1"':'',T=TYPES[it.type],accs=liveAccs();
   const sel=(act,val)=>'<select data-in="'+act+'" data-i="'+i+'"'+AU+' id="'+act+i+(auto?'a':'')+'" aria-label="الحساب">'+accs.map(a=>'<option value="'+esc(a.id)+'"'+(a.id===val?' selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select>';
   const f=flowEnds(it.type,it.acc,it.acc2,it.person);
   const left=T.from?sel('smsAcc',it.acc):'<b>'+esc(f.L)+'</b>';
   const right=T.to?sel(T.from?'smsAcc2':'smsAcc',T.from?it.acc2:it.acc):'<b>'+esc(f.R)+'</b>';
-  const Q=it.dir==='in'?[['inc','دخل'],['xfer','من حساب عندي'],['repay_in','سدّد لي شخص'],['borrow','استلفت']]:[['exp','مصروف'],['xfer','لحساب عندي'],['lend','سلّفت شخص'],['repay_out','سدّدت لشخص']];
+  const Q=it.dir==='in'?[['inc','دخل'],['xfer','من حساب عندي'],['repay_in','سدّد لي شخص'],['borrow','استلفت']]:[['exp','مصروف'],['xfer','لحساب عندي'],['lend','سلّفت شخص'],['op:lend_elec','شحن كهرباء'],['repay_out','سدّدت لشخص']];
   let h='<div class="sms smsc"><div class="sh"><label class="chk"><input type="checkbox" data-in="smsOn" data-i="'+i+'"'+AU+(it.on?' checked':'')+'><span class="amtb">'+N(fmt(it.amt))+' ج.م</span></label>'
     +'<span class="dirb '+(it.dir==='in'?'in':'out')+'">'+(it.dir==='in'?'داخل':(it.dir==='out'?'خارج':'؟'))+'</span></div>'
     +'<div class="smeta">'+esc(dayLabel(it.t))+' '+esc(timeLabel(it.t))+(it.addr?' · '+esc(it.addr):'')+'</div>'
     +(it.dir==null?'<div class="warn">مش عارف الاتجاه، اختار النوع الصح.</div>':'')
     +'<div class="lbl2">إيه الحركة دي؟</div><div class="chips" style="margin:6px 0 4px">'
-    +Q.map(q=>'<button class="chip sm'+(it.type===q[0]?' on':'')+'" data-act="smsQuick" data-t="'+q[0]+'" data-i="'+i+'"'+AU+'>'+q[1]+'</button>').join('')+'</div>'
+    +Q.map(q=>'<button class="chip sm'+((q[0].indexOf('op:')===0?it.op===q[0].slice(3):(it.type===q[0]&&!it.op))?' on':'')+'" data-act="smsQuick" data-t="'+q[0]+'" data-i="'+i+'"'+AU+'>'+q[1]+'</button>').join('')+'</div>'
     +'<div class="flow2"><div class="fbox from"><span class="lbl2">طالع من</span>'+left+'</div><div class="far">←</div><div class="fbox to"><span class="lbl2">داخل إلى</span>'+right+'</div></div>';
   if(T.from&&T.to)h+='<div style="font-size:12.5px;color:var(--muted)">الحساب المقترح هو الأكتر استخدامًا عندك، وتقدر تغيّره.</div>';
   if(T.person){
@@ -1621,7 +1629,12 @@ smsItemHtml=function(it,i,auto){
   if(auto)h+='<div style="margin-top:6px"><button class="link" data-act="smsSkip" data-i="'+i+'">تجاهل الرسالة دي</button></div>';
   return h+'</div>';
 };
-ACT.smsQuick=function(el){const it=SL(el)[+el.dataset.i];if(!it)return;setItemType(it,el.dataset.t);render()};
+ACT.smsQuick=function(el){
+  const it=SL(el)[+el.dataset.i];if(!it)return;const t=el.dataset.t;
+  if(t.indexOf('op:')===0){const o=opBy(t.slice(3));setItemType(it,o.t);it.op=o.k;it.note=o.l+(it.num?' · '+it.num:'')}
+  else{if(it.op){it.op=null;it.note=(it.dir==='in'?'وارد':'صادر')+(it.num?' · '+it.num:'')}setItemType(it,t)}
+  render();
+};
 ACT.smsPersonPick=function(el){const it=SL(el)[+el.dataset.i];if(!it)return;it.person=decodeURIComponent(el.dataset.p);render()};
 Object.assign(INP,{
   smsOn(el){SL(el)[+el.dataset.i].on=el.checked},
