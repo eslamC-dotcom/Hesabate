@@ -1021,7 +1021,8 @@ function waSheet(name,num,intro,msg0){
     +(intro?'<div class="ok" style="margin-bottom:6px">'+esc(intro)+'</div>':'')
     +'<div class="field"><label for="waNum">رقم واتساب</label><input type="text" id="waNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(WA.num)+'" data-in="waNum"></div>'
     +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:170px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
-    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waCopy','نسخ الرسالة')+'</div>'
+    +'<div class="field"><label for="waImg">سكرين التحويل (اختياري)</label><input type="file" id="waImg" accept="image/*" data-in="waImg"><div id="waImgInfo" style="font-size:13px;color:var(--muted)"></div></div>'
+    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waShare','ابعت الرسالة مع الصورة')+btn('waCopy','نسخ الرسالة')+'</div>'
     +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>',()=>openPerson(name));
 }
 function addPersonSheet(){
@@ -1055,6 +1056,17 @@ Object.assign(ACT,{
     a.href='https://wa.me/2'+v+'?text='+encodeURIComponent(WA.msg);a.target='_blank';a.rel='noopener';
     document.body.appendChild(a);a.click();a.remove();
   },
+  async waShare(){
+    const e=$('#waErr'),warn=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
+    if(!WA.file)return warn('اختار صورة السكرين الأول من الخانة اللي فوق');
+    if(!(WA.msg||'').trim())return warn('الرسالة فاضية');
+    const v=normPhone(WA.num);
+    if(okPhone(v)){const c=contacts(),i=c.findIndex(x=>x.n===WA.name);if(i>=0){if(c[i].p!==v){c[i].p=v;touch({meta:true})}}else{c.push({n:WA.name,p:v});touch({meta:true})}}
+    const data={files:[WA.file],text:WA.msg};
+    if(!(navigator.canShare&&navigator.share&&navigator.canShare(data)))return warn('المتصفح ده مش بيدعم مشاركة الصور. افتح التطبيق من كروم، أو ابعت الرسالة بزر "افتح واتساب" وارفق الصورة بإيدك.');
+    try{await navigator.share(data);e.innerHTML='<div class="ok" style="margin-top:6px">اختار واتساب وبعدين '+esc(WA.name)+(okPhone(v)?' (الرقم '+esc(v)+')':'')+' من القايمة.</div>'}
+    catch(x){if(!x||x.name!=='AbortError')warn('مقدرتش أفتح المشاركة')}
+  },
   waCopy(){
     try{navigator.clipboard.writeText(WA.msg).then(()=>toast('اتنسخت الرسالة'),()=>toast('انسخها بإيدك'))}catch(e){toast('انسخها بإيدك')}
   }
@@ -1062,6 +1074,7 @@ Object.assign(ACT,{
 Object.assign(INP,{
   waNum(el){WA.num=el.value},
   waMsg(el){WA.msg=el.value},
+  waImg(el){WA.file=(el.files&&el.files[0])||null;const i=$('#waImgInfo');if(i)i.textContent=WA.file?('اتختارت: '+WA.file.name):''},
   apName(el){AP.name=el.value},
   apNum(el){AP.num=el.value}
 });
