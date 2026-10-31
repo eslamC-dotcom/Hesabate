@@ -1301,7 +1301,7 @@ window.onSmsPermission=function(g){
 };
 
 function autoHtml(){
-  if(!smsAvailable())return '<div class="card" style="margin-bottom:10px;font-size:14px;color:var(--muted)"><b style="color:var(--fg)">القراءة التلقائية</b><br>بتشتغل في تطبيق الأندرويد. نزّله من المزيد ← تطبيق الأندرويد.</div>';
+  if(!smsAvailable())return '<div class="card" style="margin-bottom:10px;font-size:14px;color:var(--muted)"><b style="color:var(--fg)">القراءة التلقائية</b><br>مش متاحة دلوقتي. الصق الرسايل في الخانة اللي تحت.</div>';
   const A=ui.sms.auto||{items:[],matched:0,err:''};
   if(!smsOn())return '<div class="card" style="margin-bottom:10px"><b>القراءة التلقائية للرسائل</b><p style="margin:6px 0;color:var(--muted);font-size:14px">التطبيق هيقرا رسايل البنك وفودافون كاش اللي إنت تختارها بس، وبيقراها على تليفونك. اللي بيتحفظ في حسابك الحركات اللي بتوافق عليها، مش نص الرسايل.</p><div class="btns">'+btn('smsPerm','اسمح بقراءة الرسائل','primary')+'</div></div>';
   const sn=sndList();
@@ -1331,10 +1331,8 @@ function smsPickSheet(){
     +'<div class="btns">'+btn('spSave','حفظ وابدأ','primary')+'</div>');
 }
 function androidCard(){
-  let h='<div class="sec"><h2>تطبيق الأندرويد</h2></div><div class="card" style="font-size:14px">';
-  if(window.AndroidBridge)return h+'إنت داخل من تطبيق الأندرويد.</div>';
-  return h+'<p style="margin:0 0 8px;color:var(--muted)">النسخة دي بتقرا رسايل البنك وفودافون كاش وتطابقها مع الدفتر. نزّل الملف على تليفون الأندرويد وافتحه. لو التليفون سأل عن تثبيت من مصدر غير معروف، اسمح لمتصفحك بالتثبيت.</p>'
-    +'<a class="btn primary" style="display:block;text-align:center;text-decoration:none" href="'+APK_URL+'">تحميل تطبيق الأندرويد</a></div>';
+  if(window.AndroidBridge)return '';
+  return '<div class="sec"><h2>تثبيت على التليفون</h2></div><div class="card" style="font-size:14px;color:var(--muted)">افتح الموقع من كروم، واضغط القائمة (النقط التلاتة) ثم <b>تثبيت التطبيق</b> أو <b>إضافة إلى الشاشة الرئيسية</b>. بيتحدّث لوحده كل ما نعدّل عليه، من غير ما تنزّل حاجة تاني.</div>';
 }
 Object.assign(ACT,{
   smsPerm(){try{ABR().requestSmsPermission()}catch(e){toast('مقدرتش أطلب الصلاحية')}},
