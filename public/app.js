@@ -780,6 +780,7 @@ function addSmsItems(auto){
     const x={id:gid(),t:it.t,type:it.type,amt:it.amt,from:T.from?it.acc:null,to:T.to?(T.from?it.acc2:it.acc):null,
       person:T.person?it.person.trim():null,cat:(it.type==='exp'||it.type==='inc')?(inferCat(it.note)||null):null,once:false,note:it.note||null,src:'sms',sms:it.h};
     S.tx.push(x);months.push(x.t);
+    if(it.last4){const sa=x.type==='xfer'?(it.dir==='in'?x.to:x.from):(x.from||x.to);if(sa)(S.meta.acct4=S.meta.acct4||{})[it.last4]=sa}
     learnPair(it.dir||(T.to&&!T.from?'in':'out'),it.sacc||it.acc,x);
     if(it.fee>0&&x.from)S.tx.push({id:gid(),t:x.t,type:'exp',amt:it.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
     S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-2000);
@@ -1284,7 +1285,7 @@ function smsSync(){
     const mt=findMatch(p,acc);
     if(mt){ensureFee(mt.x,p,acc);mt.x[mt.s]=h;mt.x.t=m.date;S.meta.seen.push(h);seen.add(h);A.matched++;changed=true;return}
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
-    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,fee:p.fee||0,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
+    pend.push({h:h,raw:m.body,addr:m.address,amt:p.amt,bal:p.bal,dir:p.dir,t:m.date,fee:p.fee||0,last4:p.last4||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
   });
   A.items=pend;A.last=Date.now();
@@ -1419,7 +1420,7 @@ parseMsg=function(raw,dateMs){
 const _splitOld=splitMsgs;
 splitMsgs=function(t){
   t=String(t||'').replace(/\r/g,'').replace(/(\S)[ \t]+(?=تم\s+(?:تحويل|استلام)\s+(?:مبلغ\s*)?[\d٠-٩])/g,'$1\n');
-  const START=/^\s*تم\s+(?:تحويل|استلام|ايداع|إيداع|سحب|دفع|شحن|خصم|اضافة|إضافة|سداد|استرداد)/;
+  const START=/^\s*(?:تم\s+(?:تحويل|استلام|ايداع|إيداع|سحب|دفع|شحن|خصم|اضافة|إضافة|سداد|استرداد)|يرجى\s+العلم|عزيزي|Dear\b|Your\s+(?:account|credit\s+card|debit\s+card|card)|You\s+have\b|A\s+(?:debit|credit)\b)/i;
   const out=[];
   t.split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean).forEach(b=>{
     let cur=[];
@@ -1466,9 +1467,11 @@ runSmsParse=function(){
   let skipped=0,matched=0,dups=0,changed=false;
   const seen=new Set(S.meta.seen||[]),sb=S.meta.smsBal=S.meta.smsBal||{};
   S.meta.seen=S.meta.seen||[];
+  const cnt={};
   blocks.forEach(raw=>{
     const p=parseMsg(raw);if(!p){skipped++;return}
-    const h=p.opid?hashStr('op'+p.opid):hashStr(p.m),acc=guessAcc(p.m);
+    const k=cnt[p.m]=(cnt[p.m]||0)+1;
+    const h=p.opid?hashStr('op'+p.opid):hashStr(p.m+(k>1?'#'+k:'')),acc=guessAcc(p.m);
     if(p.bal!=null&&p.hasDate&&(!sb[acc]||sb[acc].t<=p.t)&&(!sb[acc]||sb[acc].v!==p.bal||sb[acc].t!==p.t)){sb[acc]={v:p.bal,t:p.t};changed=true}
     if(seen.has(h)){dups++;return}
     const mt=findMatch(p,acc);
@@ -1477,7 +1480,7 @@ runSmsParse=function(){
       S.meta.seen.push(h);seen.add(h);matched++;changed=true;return;
     }
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
-    items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
+    items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,last4:p.last4||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
       note:(p.dir==='in'?'وارد':(p.dir==='out'?'صادر':'رسالة'))+(p.who?' · '+p.who:''),dup:false,on:true});
   });
   ui.sms.items=items;ui.sms.skipped=skipped;
@@ -1601,6 +1604,46 @@ Object.assign(INP,{
   smsPerson(el){SL(el)[+el.dataset.i].person=el.value},
   smsNote(el){SL(el)[+el.dataset.i].note=el.value}
 });
+
+/* ---------- رسائل البنك (CIB وغيره) ---------- */
+const L4_RE=/(?:ending\s*(?:with)?|المنتهي\s*بـ?|ينتهي\s*بـ?|account\s+XXX?)\s*[#:]?\s*[*xX]*\s*#?(\d{3,4})(?!\d)/i;
+const MONS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+function parseBankDate(m){
+  const mk=(y,mo,d,hh,mi)=>{const t=new Date(y<100?2000+y:y,mo-1,d,hh,mi).getTime();return(mo>=1&&mo<=12&&d>=1&&d<=31&&isFinite(t)&&t<=Date.now()+864e5)?t:null};
+  let r=m.match(/(\d{1,2})[\s\-\/]([A-Za-z]{3})[a-z]*[\s\-\/,]+(\d{4})(?:[,\s]+(?:at\s+)?(\d{1,2}):(\d{2}))?/);
+  if(r&&MONS[r[2].toLowerCase()])return mk(+r[3],MONS[r[2].toLowerCase()],+r[1],+(r[4]||12),+(r[5]||0));
+  r=m.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})(?:[\s,]*(?:at|في|الساعة)?\s*(\d{1,2}):(\d{2}))?/i);
+  if(r)return mk(+r[3],+r[2],+r[1],+(r[4]||12),+(r[5]||0));
+  return null;
+}
+const _parseV=parseMsg;
+parseMsg=function(raw,dateMs){
+  const p=_parseV(raw,dateMs);if(!p)return p;
+  const m=p.m;
+  const l=m.match(L4_RE);p.last4=l?l[1]:null;
+  const rf=m.match(/رقم\s*مرجعي\s*:?\s*([A-Za-z0-9]{5,})/);if(rf)p.opid=rf[1];
+  if(/was\s+charged|charged\s+for|is\s+debited|\d\s*DR\b/i.test(m))p.dir='out';
+  else if(/is\s+credited|\d\s*CR\b/i.test(m))p.dir='in';
+  else if(/(?:إلى|الى|الي)\s+حسابك/.test(m))p.dir='in';
+  else if(/من\s+حسابك/.test(m))p.dir='out';
+  if(/available\s+limit|الحد\s+المتاح/i.test(m))p.bal=null;
+  const nm=m.match(/(?:^|\s)من\s+([A-Za-z][A-Za-z .'-]{2,40}?)\s+برقم\s+مرجعي/);
+  if(nm){p.name=nm[1].trim();p.who=p.name}
+  else if(!p.who&&/transfer\s+to\s+another\s+account/i.test(m))p.who='تحويل لحساب تاني';
+  if(!p.hasDate){const bt=parseBankDate(m);if(bt!=null){p.hasDate=true;if(!dateMs)p.t=bt}}
+  return p;
+};
+const _guess2=guessAcc;
+guessAcc=function(m){
+  const map=S.meta.acct4||{},l=m.match(L4_RE),L=liveAccs();
+  if(l&&map[l[1]]){const a=accById(map[l[1]]);if(a&&!a.hidden)return a.id}
+  if(/credit\s*card|بطاقة\s*ائتمان|كريدت/i.test(m)){const c=L.find(a=>/كريدت|credit|visa|فيزا|بطاقة|كارد/i.test(a.name));if(c)return c.id}
+  const g=_guess2(m);
+  if(/account\s+ending|حسابك\s+المنتهي|IPN|instapay|cib\.eg|credit\s*card/i.test(m)&&!L.some(a=>a.id===g&&a.kind==='bank')){
+    const b=L.find(a=>a.kind==='bank');if(b&&!/فودافون|vodafone/i.test(m))return b.id;
+  }
+  return g;
+};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
