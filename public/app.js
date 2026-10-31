@@ -1652,6 +1652,7 @@ function personEditSheet(name){
   const c=contactFor(name);
   PE={old:name,name:name,num:(c&&c.p)||''};
   openSheet('<h3>تعديل بيانات الشخص</h3>'
+    +(hasPicker()?'<div class="btns" style="margin-top:0">'+btn('pickContact','استيراد من جهات الاتصال','primary','data-ctx="pe"')+'</div>':'')
     +'<div class="field"><label for="peName">الاسم</label><input type="text" id="peName" autocomplete="off" value="'+esc(PE.name)+'" data-in="peName"></div>'
     +'<div class="field"><label for="peNum">رقم الموبايل (فودافون كاش وواتساب)</label><input type="text" id="peNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(PE.num)+'" data-in="peNum"></div>'
     +'<div style="font-size:13px;color:var(--muted)">لو غيّرت الاسم، بيتغيّر في كل حركاته القديمة وحسابه بيفضل زي ما هو.</div>'
@@ -1688,6 +1689,17 @@ Object.assign(ACT,{
   }
 });
 Object.assign(INP,{peName(el){PE.name=el.value},peNum(el){PE.num=el.value}});
+
+const _pickC=ACT.pickContact;
+ACT.pickContact=async function(el,ev){
+  if(el.dataset.ctx==='pe'&&PE){
+    const r=await pickPhoneContact();if(!r)return;
+    if(r.name){PE.name=r.name;$('#peName').value=r.name}
+    if(r.num){PE.num=r.num;$('#peNum').value=r.num}
+    return;
+  }
+  return _pickC(el,ev);
+};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
