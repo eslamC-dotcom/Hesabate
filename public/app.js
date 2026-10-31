@@ -307,7 +307,7 @@ function filteredTx(){
   else if(k==='once')a=a.filter(x=>x.once);
   else if(k==='sms')a=a.filter(x=>x.src==='sms');
   const q=ui.q.trim();
-  if(q)a=a.filter(x=>((x.note||'')+' '+(x.person||'')+' '+(x.cat||'')).indexOf(q)>=0);
+  if(q){const qq=normDigits(q).replace(/,/g,'');a=a.filter(x=>((x.note||'')+' '+(x.person||'')+' '+(x.cat||'')+' '+x.amt+' '+(x.from?accName(x.from):'')+' '+(x.to?accName(x.to):'')).indexOf(qq)>=0)}
   return a;
 }
 function logList(){
@@ -329,7 +329,7 @@ function vLog(){
     +'<button class="chip sm'+(ui.fAcc==='all'?' on':'')+'" data-act="fAcc" data-id="all">كل الحسابات</button>'
     +liveAccs().map(a=>'<button class="chip sm'+(ui.fAcc===a.id?' on':'')+'" data-act="fAcc" data-id="'+esc(a.id)+'">'+esc(a.name)+'</button>').join('')+'</div>';
   h+='<div class="scroll-x" style="margin-bottom:10px">'+kinds.map(k=>'<button class="chip sm'+(ui.fKind===k[0]?' on':'')+'" data-act="fKind" data-id="'+k[0]+'">'+k[1]+'</button>').join('')+'</div>';
-  h+='<input type="search" id="logQ" placeholder="دوّر في الملاحظات والأسماء" value="'+esc(ui.q)+'" data-in="q">';
+  h+='<input type="search" id="logQ" placeholder="دوّر بالاسم أو المبلغ أو الحساب" value="'+esc(ui.q)+'" data-in="q">';
   h+='<div id="logList">'+logList()+'</div>';
   return h;
 }
