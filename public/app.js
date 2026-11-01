@@ -1448,8 +1448,8 @@ parseMsg=function(raw,dateMs){
 };
 const _splitOld=splitMsgs;
 splitMsgs=function(t){
-  t=String(t||'').replace(/\r/g,'').replace(/(\S)[ \t]+(?=تم\s+(?:تحويل|استلام)\s+(?:مبلغ\s*)?[\d٠-٩])/g,'$1\n');
-  const START=/^\s*(?:تم\s+(?:تحويل|استلام|ايداع|إيداع|سحب|دفع|شحن|خصم|اضافة|إضافة|سداد|استرداد)|يرجى\s+العلم|عزيزي|Dear\b|Your\s+(?:account|credit\s+card|debit\s+card|card)|You\s+have\b|A\s+(?:debit|credit)\b)/i;
+  t=String(t||'').replace(/\r/g,'').replace(/(\S)[ \t]+(?=تم\s+(?:تحويل|استلام|شراء))/g,'$1\n');
+  const START=/^\s*(?:تم\s+(?:تحويل|استلام|ايداع|إيداع|سحب|دفع|شراء|شحن|خصم|اضافة|إضافة|سداد|استرداد)|يرجى\s+العلم|عزيزي|Dear\b|Your\s+(?:account|credit\s+card|debit\s+card|card)|You\s+have\b|A\s+(?:debit|credit)\b)/i;
   const out=[];
   t.split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean).forEach(b=>{
     let cur=[];
@@ -1491,6 +1491,10 @@ findMatch=function(p,acc){
   });
   return best?{x:best,s:bs}:null;
 };
+function isDupTx(h,p){
+  return S.tx.some(x=>x.sms===h||x.so===h||x.si===h)
+    ||S.tx.some(x=>x.src==='sms'&&!x.sms&&Math.abs(x.amt-p.amt)<0.005&&Math.abs(x.t-p.t)<864e5);
+}
 runSmsParse=function(){
   const blocks=splitMsgs(ui.sms.text||''),items=[];
   let skipped=0,matched=0,dups=0,changed=false;
@@ -1502,7 +1506,7 @@ runSmsParse=function(){
     const k=cnt[p.m]=(cnt[p.m]||0)+1;
     const h=p.opid?hashStr('op'+p.opid):hashStr(p.m+(k>1?'#'+k:'')),acc=guessAcc(p.m);
     if(p.bal!=null&&p.hasDate&&(!sb[acc]||sb[acc].t<=p.t)&&(!sb[acc]||sb[acc].v!==p.bal||sb[acc].t!==p.t)){sb[acc]={v:p.bal,t:p.t};changed=true}
-    if(seen.has(h)){dups++;return}
+    if(seen.has(h)&&isDupTx(h,p)){dups++;return}
     const mt=findMatch(p,acc);
     if(mt){
       ensureFee(mt.x,p,acc);mt.x[mt.s]=h;if(p.hasDate)mt.x.t=p.t;
@@ -1639,8 +1643,8 @@ ACT.smsPersonPick=function(el){const it=SL(el)[+el.dataset.i];if(!it)return;it.p
 Object.assign(INP,{
   smsOn(el){SL(el)[+el.dataset.i].on=el.checked},
   smsType(el){const it=SL(el)[+el.dataset.i];setItemType(it,el.value);render()},
-  smsAcc(el){SL(el)[+el.dataset.i].acc=el.value},
-  smsAcc2(el){SL(el)[+el.dataset.i].acc2=el.value},
+  smsAcc(el){const it=SL(el)[+el.dataset.i],T=TYPES[it.type];it.acc=el.value;if(!(T.from&&T.to)||it.dir!=='in')it.sacc=el.value},
+  smsAcc2(el){const it=SL(el)[+el.dataset.i];it.acc2=el.value;if(it.dir==='in')it.sacc=el.value},
   smsPerson(el){SL(el)[+el.dataset.i].person=el.value},
   smsNote(el){SL(el)[+el.dataset.i].note=el.value}
 });
@@ -1809,6 +1813,57 @@ Object.assign(INP,{
   payAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;PAY.amt=v},
   payNote(el){PAY.note=el.value}
 });
+
+/* ---------- شحن كهرباء (شراء)، وتصحيح حساب الرصيد ---------- */
+const _parseE=parseMsg;
+parseMsg=function(raw,dateMs){
+  const p=_parseE(raw,dateMs);if(!p)return p;
+  const m=p.m;
+  if(/تم\s+شراء\s+شحنة\s+كهرباء|شحنة\s+كهرباء/.test(m)){
+    p.dir='out';p.elec=true;p.num=null;p.fee=0;
+    const a=m.match(new RegExp('خصم\\s*مبلغ\\s*'+NUMR));if(a)p.amt=parseFloat(a[1].replace(/,/g,''));
+    const b=m.match(new RegExp('رصيدك\\s*الحال[يى]\\s*'+NUMR));if(b)p.bal=parseFloat(b[1].replace(/,/g,''));
+    p.who='شحن كهرباء';
+  }
+  return p;
+};
+function fixSmsBal(){
+  const sb=S.meta.smsBal;if(!sb||S.meta.sbFix===1)return;
+  const keep={};
+  (S.meta.smsSenders||[]).forEach(s=>{keep[s.acc]=1});
+  Object.keys(S.meta.acct4||{}).forEach(k=>{keep[S.meta.acct4[k]]=1});
+  liveAccs().forEach(a=>{if(a.kind==='wallet'||a.kind==='bank')keep[a.id]=1});
+  Object.keys(sb).forEach(id=>{if(!keep[id])delete sb[id]});
+  S.meta.sbFix=1;setTimeout(()=>touch({meta:true}),0);
+}
+const _reconH=reconHtml;
+reconHtml=function(){fixSmsBal();return _reconH()};
+const _addSms2=addSmsItems;
+addSmsItems=function(auto){
+  const src=auto?(ui.sms.auto&&ui.sms.auto.items):ui.sms.items,its=(src||[]).filter(i=>i.on);
+  const kw=S.meta.kw=S.meta.kw||{};if(!kw['كهرباء'])kw['كهرباء']='كهربا ومياه';
+  const before=JSON.parse(JSON.stringify(S.meta.smsBal||{})),n0=S.tx.length;
+  _addSms2(auto);
+  if(S.tx.length===n0)return;
+  /* رصيد الرسالة يخص حساب الرسالة نفسه (مش الحساب التاني في التحويل) */
+  const sb=S.meta.smsBal=before,last={};
+  its.forEach(it=>{
+    if(it.bal==null)return;
+    const id=it.sacc||it.acc;
+    if(!last[id]||last[id].t<=it.t)last[id]={t:it.t,v:it.bal};
+  });
+  Object.keys(last).forEach(id=>{if(!sb[id]||sb[id].t<=last[id].t)sb[id]=last[id]});
+  const nAdded=its.length,rep=ui.sms.report;
+  if(rep){
+    const added=rep.lines.slice(0,nAdded),b=balances(),lines=[];
+    Object.keys(last).forEach(id=>{
+      const d=Math.round((last[id].v-b[id])*100)/100;
+      if(Math.abs(d)>=0.5)lines.push('رصيد '+esc(accName(id))+' في آخر رسالة '+N(fmt(last[id].v))+' وفي الدفتر '+N(fmt(b[id]))+' (فرق '+N(fmt(Math.abs(d)))+'). <button class="link" data-act="openAcc" data-id="'+esc(id)+'">افتح الحساب وظبّطه</button>');
+    });
+    rep.lines=added.concat(lines);
+  }
+  touch({meta:true});
+};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
