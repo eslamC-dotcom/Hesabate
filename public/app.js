@@ -1476,7 +1476,7 @@ findMatch=function(p,acc){
   let best=null,bs=null,bscore=1e18;
   S.tx.forEach(x=>{
     if(Math.abs(x.amt-p.amt)>0.005||x.feeOf)return;
-    const dt=Math.abs(x.t-p.t);if(dt>12*36e5)return;
+    const dt=Math.abs(x.t-p.t);if(dt>48*36e5)return;
     let numOk=false;
     if(p.num){
       const xn=x.num||((x.note||'').match(PH_RE)||[])[1];
@@ -1672,7 +1672,7 @@ parseMsg=function(raw,dateMs){
   else if(/(?:إلى|الى|الي)\s+حسابك/.test(m))p.dir='in';
   else if(/من\s+حسابك/.test(m))p.dir='out';
   if(/available\s+limit|الحد\s+المتاح/i.test(m))p.bal=null;
-  const nm=m.match(/(?:^|\s)من\s+([A-Za-z][A-Za-z .'-]{2,40}?)\s+برقم\s+مرجعي/);
+  const nm=m.match(/(?:^|\s)من\s+([^\d*]{2,50}?)\s+برقم\s+مرجعي/);
   if(nm){p.name=nm[1].trim();p.who=p.name}
   else if(!p.who&&/transfer\s+to\s+another\s+account/i.test(m))p.who='تحويل لحساب تاني';
   if(!p.hasDate){const bt=parseBankDate(m);if(bt!=null){p.hasDate=true;if(!dateMs)p.t=bt}}
@@ -1917,6 +1917,39 @@ txRow=function(x){
   const k=(x.type==='xfer'||x.type==='aloan'||x.type==='arepay')?'x':(T.debt?'d':(s>0?'i':(x.type==='adj'?'x':'o')));
   const ic={x:'⇄',d:'👤',i:'↓',o:'↑'}[k];
   return h.replace('<div class="mid">','<span class="ic ic-'+k+'">'+ic+'</span><div class="mid">');
+};
+
+/* ---------- ربط رسالة بحركة مسجلة بإيدك ---------- */
+function linkCands(it){
+  const inn=it.dir==='in',out=it.dir==='out';
+  return S.tx.filter(x=>{
+    const T=TYPES[x.type];
+    if(!T||x.feeOf||x.type==='adj'||x.sms||x.so||x.si)return false;
+    if(Math.abs(x.amt-it.amt)>=0.005||Math.abs(x.t-it.t)>=72*36e5)return false;
+    if(inn&&!T.to)return false;
+    if(out&&!T.from)return false;
+    return true;
+  }).sort((a,b)=>Math.abs(a.t-it.t)-Math.abs(b.t-it.t)).slice(0,2);
+}
+const _sih=smsItemHtml;
+smsItemHtml=function(it,i,auto){
+  let h=_sih(it,i,auto);
+  const c=linkCands(it);if(!c.length)return h;
+  const AU=auto?' data-auto="1"':'';
+  const blk='<div class="warn" style="margin-top:8px">ممكن تكون مسجّلة قبل كده:'
+    +c.map(x=>'<div style="margin-top:4px">'+esc(flowText(x))+' · '+esc(dayLabel(x.t))+' '+esc(timeLabel(x.t))+' <button class="link" data-act="smsLink" data-i="'+i+'" data-id="'+esc(x.id)+'"'+AU+'>هي نفس الحركة</button></div>').join('')+'</div>';
+  return h.replace('<details>',blk+'<details>');
+};
+ACT.smsLink=function(el){
+  const list=SL(el),it=list[+el.dataset.i],x=S.tx.find(y=>y.id===el.dataset.id);
+  if(!it||!x)return;
+  x[it.dir==='in'?'si':'so']=it.h;
+  x.t=it.t;
+  ensureFee(x,{fee:it.fee,hasDate:true,t:it.t},it.sacc||it.acc);
+  (S.meta.seen=S.meta.seen||[]).push(it.h);
+  if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{},id=it.sacc||it.acc;if(!sb[id]||sb[id].t<=it.t)sb[id]={v:it.bal,t:it.t}}
+  list.splice(+el.dataset.i,1);
+  touch({meta:true});toast('اتربطت الرسالة بالحركة المسجّلة');
 };
 
 /* ---------- الدخول والخروج ---------- */
