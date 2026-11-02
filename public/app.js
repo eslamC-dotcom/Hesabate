@@ -1036,7 +1036,7 @@ function waSheet(name,num,intro,msg0){
     +'<div class="field"><label for="waNum">رقم واتساب</label><input type="text" id="waNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(WA.num)+'" data-in="waNum"></div>'
     +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:170px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
     +'<div class="field"><label for="waImg">سكرين التحويل (اختياري)</label><input type="file" id="waImg" accept="image/*" data-in="waImg"><div id="waImgInfo" style="font-size:13px;color:var(--muted)"></div></div>'
-    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waShare','ابعت الرسالة مع الصورة')+btn('waCopy','نسخ الرسالة')+'</div>'
+    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waShare','ابعت الرسالة مع الصورة')+btn('waCopy','نسخ الرسالة')+btn('sheetClose','تخطي، من غير رسالة')+'</div>'
     +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>',()=>openPerson(name));
 }
 function addPersonSheet(){
@@ -1171,7 +1171,7 @@ function opMsg(){
   const a=parseNum(OS.amt),prev=opPrevBal();
   const line=(OS.line||'').trim()||opLine();
   if(!(a>0))return line;
-  return line+'\n'+balLine(prev,r2(prev+TYPES[OS.o.t].debt*a));
+  return stmtMsg(OS.name,line,[{type:OS.o.t,amt:a,op:OS.o.k,t:Date.now(),person:OS.name}]);
 }
 function opUpdate(){
   const pv=$('#oPrev');if(pv)pv.textContent=opMsg();
@@ -1210,8 +1210,9 @@ function opSave(){
   const m=S.meta;m.opAcc=m.opAcc||{};m.opAcc[o.k]=OS.acc;
   const line=(OS.line||'').trim()||opLine(),def=opTmpl(o).split('{المبلغ}').join(fmt(amt));
   if(OS.edited&&line!==def){m.opTmpl=m.opTmpl||{};const a=fmt(amt);m.opTmpl[o.k]=line.indexOf(a)>=0?line.split(a).join('{المبلغ}'):line}
-  const msg=line+'\n'+balLine(prev,r2(prev+T.debt*amt)),ids=txs.map(y=>y.id);
+  const ids=txs.map(y=>y.id);
   S.tx=S.tx.concat(txs);
+  const msg=stmtMsg(name,line);
   touch({meta:true});
   toast('اتسجّل: '+o.l+' '+fmt(amt)+' ج.م',()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
   waSheet(name,cs[ci].p,'اتسجّلت العملية. الرسالة جاهزة، اضغط افتح واتساب.',msg);
@@ -1863,6 +1864,59 @@ addSmsItems=function(auto){
     rep.lines=added.concat(lines);
   }
   touch({meta:true});
+};
+
+/* ---------- رسالة تفاصيل الحساب (واتساب) ---------- */
+function stmtMsg(name,head,extra){
+  const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
+  const W={lend:'سلف',repay_in:'سداد',borrow:'استلاف',repay_out:'سداد ليك'};
+  const sg=x=>TYPES[x.type].debt,MAX=10;
+  const rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
+  let prior=0;older.forEach(x=>prior+=sg(x)*x.amt);prior=Math.round(prior*100)/100;
+  let up=0,dn=0;all.forEach(x=>{if(sg(x)>0)up+=x.amt;else dn+=x.amt});
+  up=Math.round(up*100)/100;dn=Math.round(dn*100)/100;
+  const net=Math.round((up-dn)*100)/100,LN='━━━━━━━━━━━━';
+  const L=[];
+  if(head&&head.trim())L.push('🆕 '+head.trim(),'');
+  L.push('📋 *تفاصيل حسابنا*',LN);
+  if(older.length&&Math.abs(prior)>0.004)L.push('▫️ قبل كده: '+(prior>0?'عليك ':'ليك عندي ')+fmt(Math.abs(prior))+' ج');
+  rows.forEach(x=>{
+    const o=x.op&&opBy(x.op),lbl=o?o.l:W[x.type];
+    L.push((sg(x)>0?'➕ ':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
+  });
+  if(!rows.length)L.push('لسه مفيش حركات');
+  L.push(LN);
+  if(up>0)L.push('➕ إجمالي المطلوب: '+fmt(up)+' ج');
+  if(dn>0)L.push('➖ إجمالي السداد: '+fmt(dn)+' ج');
+  L.push(LN);
+  if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
+  else if(net>0)L.push('💰 *الباقي عليك: '+fmt(net)+' ج*');
+  else L.push('💰 *الباقي ليك عندي: '+fmt(-net)+' ج*');
+  L.push('','🧾 _من دفتر حساباتي_');
+  return L.join('\n');
+}
+debtMsg=function(name){return stmtMsg(name,'')};
+
+/* ---------- شكل الرئيسية والسجل ---------- */
+const TILES='<div class="tiles">'
+  +'<button class="tile t-out" data-act="quick" data-type="exp"><span class="ti">↑</span>مصروف</button>'
+  +'<button class="tile t-in" data-act="quick" data-type="inc"><span class="ti">↓</span>دخل</button>'
+  +'<button class="tile t-x" data-act="quick" data-type="xfer"><span class="ti">⇄</span>تحويل بين حساباتي</button>'
+  +'<button class="tile t-p" data-act="pickPerson"><span class="ti">👤</span>عملية مع شخص</button>'
+  +'<button class="tile t-vc" data-act="vcOpen"><span class="ti">📲</span>تحويل فودافون كاش من التطبيق</button>'
+  +'</div>';
+const _vHome2=vHome;
+vHome=function(){
+  let h=_vHome2();
+  h=h.split(VCBTN).join('');
+  return h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
+};
+const _txRow2=txRow;
+txRow=function(x){
+  const h=_txRow2(x),s=sign(x),T=TYPES[x.type];
+  const k=(x.type==='xfer'||x.type==='aloan'||x.type==='arepay')?'x':(T.debt?'d':(s>0?'i':(x.type==='adj'?'x':'o')));
+  const ic={x:'⇄',d:'👤',i:'↓',o:'↑'}[k];
+  return h.replace('<div class="mid">','<span class="ic ic-'+k+'">'+ic+'</span><div class="mid">');
 };
 
 /* ---------- الدخول والخروج ---------- */
