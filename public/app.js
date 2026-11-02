@@ -26,7 +26,7 @@ const TYPES={
 };
 const ENTRY_ORDER=['exp','inc','xfer','lend','repay_in','borrow','repay_out','aloan','arepay'];
 const S={accounts:[],tx:[],meta:{seen:[],last:{},kw:{}}};
-const ui={tab:'home',fAcc:'all',fKind:'all',q:'',limit:80};
+const ui={tab:'home',fAcc:'all',fKind:'all',q:'',limit:200};
 const freshMeta=()=>({seen:[],last:{},kw:{},contacts:[],smsBal:{}});
 function defaults(){return [
   {id:'a_cash',name:'جيبي',kind:'cash',color:COLORS[0],open:0},
@@ -587,9 +587,9 @@ Object.assign(ACT,{
   icRepay(el){newEntry('arepay',{from:el.dataset.d,to:el.dataset.c,amt:el.dataset.amt})},
   backdrop(el,ev){if(ev.target===el)closeSheet()},
   undo(){if(undoFn){const f=undoFn;undoFn=null;$('#toast').innerHTML='';f()}},
-  fAcc(el){ui.fAcc=el.dataset.id;ui.limit=80;render()},
-  fKind(el){ui.fKind=el.dataset.id;ui.limit=80;render()},
-  more(){ui.limit+=80;render()},
+  fAcc(el){ui.fAcc=el.dataset.id;ui.limit=200;render()},
+  fKind(el){ui.fKind=el.dataset.id;ui.limit=200;render()},
+  more(){ui.limit+=200;render()},
   openTx(el){openTxSheet(el.dataset.id)},
   editTx(el){
     const x=S.tx.find(y=>y.id===el.dataset.id);if(!x)return;
@@ -646,7 +646,7 @@ Object.assign(ACT,{
   eSaveMore(){saveEntry(true)}
 });
 Object.assign(INP,{
-  q(el){ui.q=el.value;ui.limit=80;const b=$('#logList');if(b)b.innerHTML=logList()},
+  q(el){ui.q=el.value;ui.limit=200;const b=$('#logList');if(b)b.innerHTML=logList()},
   eAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;E.amt=v},
   eNote(el){E.note=el.value;entrySug()},
   ePerson(el){E.person=el.value;const b=$('#ePInfo');if(b)b.innerHTML=personInfoHtml()},
@@ -1501,7 +1501,7 @@ runSmsParse=function(){
   let skipped=0,matched=0,dups=0,changed=false;
   const seen=new Set(S.meta.seen||[]),sb=S.meta.smsBal=S.meta.smsBal||{};
   S.meta.seen=S.meta.seen||[];
-  const cnt={};
+  const cnt={},ML=[];
   blocks.forEach(raw=>{
     const p=parseMsg(raw);if(!p){skipped++;return}
     const k=cnt[p.m]=(cnt[p.m]||0)+1;
@@ -1511,7 +1511,8 @@ runSmsParse=function(){
     const mt=findMatch(p,acc);
     if(mt){
       ensureFee(mt.x,p,acc);mt.x[mt.s]=h;if(p.hasDate)mt.x.t=p.t;
-      S.meta.seen.push(h);seen.add(h);matched++;changed=true;return;
+      S.meta.seen.push(h);seen.add(h);matched++;changed=true;
+      ML.push(N(fmt(mt.x.amt))+' ج.م: '+esc(flowText(mt.x))+' · '+esc(dayLabel(mt.x.t))+' '+esc(timeLabel(mt.x.t)));return;
     }
     const others=liveAccs().map(a=>a.id).filter(i=>i!==acc);
     items.push({h:h,raw:raw,amt:p.amt,bal:p.bal,dir:p.dir,t:p.t,fee:p.fee||0,last4:p.last4||'',num:p.num||'',type:p.dir==='in'?'inc':'exp',acc:acc,acc2:others[0]||acc,person:knownName(p),
@@ -1520,6 +1521,7 @@ runSmsParse=function(){
   ui.sms.items=items;ui.sms.skipped=skipped;
   const L=[];
   if(matched)L.push(N(matched)+' رسالة اتطابقت مع تحويلات مسجّلة في الدفتر وماتضافتش تاني.');
+  ML.forEach(l=>L.push('• '+l));
   if(dups)L.push(N(dups)+' رسالة كانت اتسجّلت قبل كده فاتخطيتها.');
   L.unshift(N(blocks.length)+' رسالة اتقرأت: '+N(items.length)+' للمراجعة'+(skipped?'، واتخطّيت '+N(skipped)+' مفيهاش مبلغ':'')+'.');
   ui.sms.report={title:'نتيجة التحليل',lines:L};
@@ -1949,7 +1951,7 @@ ACT.smsLink=function(el){
   (S.meta.seen=S.meta.seen||[]).push(it.h);
   if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{},id=it.sacc||it.acc;if(!sb[id]||sb[id].t<=it.t)sb[id]={v:it.bal,t:it.t}}
   list.splice(+el.dataset.i,1);
-  touch({meta:true});toast('اتربطت الرسالة بالحركة المسجّلة');
+  touch({meta:true});toast('اتربطت. الحركة بقت على وقت الرسالة: '+dayLabel(x.t)+' '+timeLabel(x.t));
 };
 
 /* ---------- الدخول والخروج ---------- */
