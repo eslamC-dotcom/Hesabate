@@ -1227,12 +1227,12 @@ function openPerson(name,back){
     +'<div class="btns" style="margin:8px 0 0">'+btn('personPay','سداد','primary','data-p="'+esc(e)+'"')+btn('personEdit','تعديل الاسم والرقم','','data-p="'+esc(e)+'"')+btn('personDel','حذف','danger','data-p="'+esc(e)+'"')+'</div>'
     +'<div style="font-size:26px;font-weight:700;margin-block:6px 2px" class="'+(p.bal>0.004?'amt debt':(p.bal<-0.004?'amt out':''))+'">'
     +(Math.abs(p.bal)<0.005?'<small style="font-size:16px">حسابكم متصفّي</small>':N(fmt(Math.abs(p.bal)))+' <small style="font-size:14px;font-weight:500">ج.م '+(p.bal>0?'عليه ليك':'عليك له')+'</small>')+'</div>';
+  h+='<div class="btns" style="margin:6px 0 4px">'+btn('waOpen','ابعت كشف الحساب على واتساب','primary','data-p="'+esc(e)+'"')+'</div>';
   groups.forEach(g=>{
     h+='<div class="lbl2" style="margin-top:14px">'+esc(g)+'</div><div class="qa" style="margin:6px 0 0">'
       +OPS.filter(o=>o.g===g).map(o=>'<button class="btn" data-act="opStart" data-k="'+o.k+'" data-p="'+esc(e)+'">'+esc(o.l)+'</button>').join('')+'</div>';
   });
-  h+='<div class="btns" style="margin-top:14px">'+btn('waOpen','رسالة بتفاصيل الحساب','','data-p="'+esc(e)+'"')+'</div>';
-  if(list.length)h+='<div class="sec"><h2>الحركات</h2></div><div class="list">'+list.map(txRow).join('')+'</div>';
+  if(list.length)h+='<div class="sec"><h2>كشف الحساب</h2></div>'+stmtTable(name);
   openSheet(h,back);
 }
 function pickPersonSheet(){
@@ -1888,13 +1888,16 @@ function stmtMsg(name,head,extra){
   });
   if(!rows.length)L.push('لسه مفيش حركات');
   L.push(LN);
-  if(up>0)L.push('➕ إجمالي المطلوب: '+fmt(up)+' ج');
-  if(dn>0)L.push('➖ إجمالي السداد: '+fmt(dn)+' ج');
-  L.push(LN);
-  if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
-  else if(net>0)L.push('💰 *الباقي عليك: '+fmt(net)+' ج*');
-  else L.push('💰 *الباقي ليك عندي: '+fmt(-net)+' ج*');
-  L.push('','🧾 _من دفتر حساباتي_');
+  if(dn>0.004){
+    L.push('الإجمالي: '+fmt(up)+' ج');
+    L.push('السداد: '+fmt(dn)+' ج');
+    if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
+    else if(net>0)L.push('💰 *الباقي عليك: '+fmt(net)+' ج*');
+    else L.push('💰 *الباقي ليك عندي: '+fmt(-net)+' ج*');
+  }else{
+    if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
+    else L.push('💰 *الإجمالي'+(net>0?' عليك: ':' ليك عندي: ')+fmt(Math.abs(net))+' ج*');
+  }
   return L.join('\n');
 }
 debtMsg=function(name){return stmtMsg(name,'')};
@@ -1953,6 +1956,27 @@ ACT.smsLink=function(el){
   list.splice(+el.dataset.i,1);
   touch({meta:true});toast('اتربطت. الحركة بقت على وقت الرسالة: '+dayLabel(x.t)+' '+timeLabel(x.t));
 };
+
+/* ---------- كشف حساب الشخص + إرسال من أي حركة ---------- */
+function stmtTable(name){
+  const W={lend:'سلف',repay_in:'سداد منه',borrow:'استلاف منه',repay_out:'سداد ليه'};
+  const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).sort((a,b)=>a.t-b.t);
+  let run=0;const rows=all.map(x=>{const d=TYPES[x.type].debt;run=Math.round((run+d*x.amt)*100)/100;return {x:x,d:d,run:run}});
+  return '<div class="list">'+rows.reverse().map(r=>{
+    const x=r.x,o=x.op&&opBy(x.op),lbl=o?o.l:W[x.type];
+    return '<button class="row" data-act="openTx" data-id="'+esc(x.id)+'"><div class="mid"><div class="t1">'+esc(lbl)+'</div>'
+      +'<div class="t2">'+esc(dayLabel(x.t))+' '+esc(timeLabel(x.t))+' · الباقي بعدها: '+(Math.abs(r.run)<0.005?'خالص':N(fmt(Math.abs(r.run)))+(r.run>0?' عليه':' عليك'))+'</div></div>'
+      +'<div class="amt '+(r.d>0?'debt':'in')+'">'+(r.d>0?'+':'−')+N(fmt(x.amt))+'</div></button>';
+  }).join('')+'</div>';
+}
+const _openTxS=openTxSheet;
+openTxSheet=function(id){
+  _openTxS(id);
+  const x=S.tx.find(y=>y.id===id);if(!x||!x.person)return;
+  const bs=document.querySelectorAll('.sheet .btns');
+  if(bs.length)bs[bs.length-1].insertAdjacentHTML('afterbegin',btn('txSend','ابعت كشف الحساب لـ '+x.person,'primary','data-p="'+esc(encodeURIComponent(x.person))+'"'));
+};
+ACT.txSend=function(el){waSheet(decodeURIComponent(el.dataset.p),null,'ده كشف حساب '+decodeURIComponent(el.dataset.p)+' بعد الحركة دي.')};
 
 /* ---------- الدخول والخروج ---------- */
 async function doAuth(fn){
