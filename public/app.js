@@ -26,7 +26,7 @@ const TYPES={
 };
 const ENTRY_ORDER=['exp','inc','xfer','lend','repay_in','borrow','repay_out','aloan','arepay'];
 const S={accounts:[],tx:[],meta:{seen:[],last:{},kw:{}}};
-const ui={tab:'home',fAcc:'all',fKind:'all',q:'',limit:200};
+const ui={tab:'home',fAcc:'all',fKind:'all',q:'',limit:200,mOff:0};
 const freshMeta=()=>({seen:[],last:{},kw:{},contacts:[],smsBal:{}});
 function defaults(){return [
   {id:'a_cash',name:'جيبي',kind:'cash',color:COLORS[0],open:0},
@@ -245,8 +245,9 @@ function txRow(x){
     +(x.once?'<span class="pill once">طارئ</span>':'')+(x.src==='sms'?'<span class="pill">رسالة</span>':'')
     +'</div><div class="t2">'+esc(flowText(x))+' · '+timeLabel(x.t)+'</div></div><div class="amt '+cls+'">'+sg+N(fmt(x.amt))+'</div></button>';
 }
-function monthStats(){
-  const now=new Date(),k=mk(now.getTime());
+function monthDate(off){const n=new Date();return new Date(n.getFullYear(),n.getMonth()+(off||0),1)}
+function monthStats(off){
+  const k=mk(monthDate(off).getTime());
   const cats={};let exp=0,inc=0,once=0;
   S.tx.forEach(x=>{
     if(mk(x.t)!==k)return;
@@ -259,7 +260,7 @@ function monthStats(){
   return {cats:Object.values(cats).sort((a,b)=>(b.reg+b.once)-(a.reg+a.once)),exp:exp,inc:inc,once:once};
 }
 function vHome(){
-  const T=totals(),b=T.b,M=monthStats();
+  const T=totals(),b=T.b,M=monthStats(ui.mOff),MP=monthStats((ui.mOff||0)-1);
   const first=!S.tx.length&&liveAccs().every(a=>!(+a.open));
   let h='<section class="hero"><div class="lbl">الفلوس اللي معاك دلوقتي</div><div class="big">'+N(fmt(T.cash))+'<small>ج.م</small></div>'
     +'<div class="sub"><div><b>'+N(fmt(T.owedToMe))+'</b><span>ليك عند الناس</span></div><div><b>'+N(fmt(T.iOwe))+'</b><span>عليك للناس</span></div></div>'
@@ -277,10 +278,18 @@ function vHome(){
     h+='<div class="sec"><h2>ديون بين حساباتك</h2></div><div class="list">'+ID.map(d=>
       '<button class="row" data-act="icRepay" data-d="'+esc(d.debtor)+'" data-c="'+esc(d.creditor)+'" data-amt="'+d.amt+'"><div class="mid"><div class="t1">'+esc(accName(d.debtor))+' واخد من '+esc(accName(d.creditor))+'</div><div class="t2">الفلوس دي جوّه حساباتك ومش بتغيّر إجمالي فلوسك. اضغط عشان تسجّل سداد.</div></div><div class="amt debt">'+N(fmt(d.amt))+'</div></button>').join('')+'</div>';
   }
-  h+='<div class="sec"><h2>الشهر ده</h2></div><div class="card">';
-  if(!M.exp&&!M.inc)h+='<div class="empty" style="padding:10px">لسه مفيش حركات الشهر ده.</div>';
+  const mTitle=(ui.mOff||0)===0?'الشهر ده':monthDate(ui.mOff).toLocaleDateString('ar-EG',{month:'long',year:'numeric'});
+  h+='<div class="sec mnav"><button class="link" data-act="mOff" data-d="-1" aria-label="الشهر اللي قبله">›</button><h2>'+esc(mTitle)+'</h2>'
+    +((ui.mOff||0)<0?'<button class="link" data-act="mOff" data-d="1" aria-label="الشهر اللي بعده">‹</button>':'<span class="link" style="visibility:hidden">‹</span>')+'</div><div class="card">';
+  if(!M.exp&&!M.inc)h+='<div class="empty" style="padding:10px">'+((ui.mOff||0)===0?'لسه مفيش حركات الشهر ده.':'مفيش حركات في الشهر ده.')+'</div>';
   else{
+    let cmp='';
+    if(MP.exp>0&&M.exp>0){
+      const pc=Math.round((M.exp-MP.exp)/MP.exp*100);
+      cmp=pc===0?'زي الشهر اللي قبله':(pc>0?'أكتر بـ '+N(String(pc))+'٪ من الشهر اللي قبله':'أقل بـ '+N(String(-pc))+'٪ من الشهر اللي قبله');
+    }
     h+='<div class="kv"><span>صرفت</span><b>'+N(fmt(M.exp))+' ج.م</b></div>'
+      +(cmp?'<div class="t2" style="font-size:12px;color:var(--muted);padding:2px 0 4px">'+cmp+'</div>':'')
       +'<div class="kv"><span>منهم طارئ أو مرة واحدة</span><b>'+N(fmt(M.once))+' ج.م</b></div>'
       +'<div class="kv"><span>دخل</span><b>'+N(fmt(M.inc))+' ج.م</b></div>';
     const mx=Math.max.apply(null,M.cats.map(c=>c.reg+c.once).concat([1]));
@@ -589,6 +598,7 @@ Object.assign(ACT,{
   undo(){if(undoFn){const f=undoFn;undoFn=null;$('#toast').innerHTML='';f()}},
   fAcc(el){ui.fAcc=el.dataset.id;ui.limit=200;render()},
   fKind(el){ui.fKind=el.dataset.id;ui.limit=200;render()},
+  mOff(el){ui.mOff=Math.min(0,(ui.mOff||0)+(+el.dataset.d||0));render()},
   more(){ui.limit+=200;render()},
   openTx(el){openTxSheet(el.dataset.id)},
   editTx(el){
