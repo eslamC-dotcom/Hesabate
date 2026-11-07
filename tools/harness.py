@@ -38,7 +38,7 @@ def run(scenario, tx=(), public=None, port=8777, width=390, height=844, path='in
     try:
         with sync_playwright() as p:
             b = p.chromium.launch()
-            pg = b.new_context(viewport={'width': width, 'height': height}, service_workers='block').new_page()
+            pg = b.new_context(viewport={'width': width, 'height': height}, service_workers='block', timezone_id='UTC', locale='ar-EG').new_page()
             errs = []
             pg.on('pageerror', lambda e: errs.append(str(e)))
             def route(r):
