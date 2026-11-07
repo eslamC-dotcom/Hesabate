@@ -374,7 +374,8 @@ function vMore(){
   h+='<div class="sec"><h2>الأرقام المحفوظة</h2></div>';
   const cs=S.meta.contacts||[];
   h+=cs.length?'<div class="list">'+cs.map((c,i)=>'<div class="row"><div class="mid"><div class="t1">'+esc(c.n)+'</div><div class="t2 num">'+esc(c.p)+'</div></div><button class="link" data-act="delContact" data-i="'+i+'">مسح</button></div>').join('')+'</div>':'<div class="empty" style="padding:10px">الأرقام اللي تحوّل لها بتتحفظ هنا.</div>';
-  h+='<div class="sec"><h2>نسخة احتياطية</h2></div><div class="card"><p style="margin:0 0 6px;color:var(--muted);font-size:14px">حمّل نسخة من بياناتك كملف، أو استرجع نسخة قديمة.</p><div class="btns" style="margin-top:8px">'+btn('exportData','حفظ نسخة','primary')+btn('importOpen','استرجاع نسخة')+'</div></div>';
+  h+='<div class="sec"><h2>نسخة احتياطية</h2></div><div class="card"><p style="margin:0 0 6px;color:var(--muted);font-size:14px">حمّل نسخة من بياناتك كملف، أو استرجع نسخة قديمة. قبل أي استرجاع بنحفظ نسخة أمان تلقائي.</p><div class="kv"><span>آخر نسخة حمّلتها</span><b>'+(S.meta.lastBackup?esc(new Date(S.meta.lastBackup).toLocaleDateString('ar-EG',{day:'numeric',month:'long'})):'لسه')+'</b></div><div class="btns" style="margin-top:8px">'+btn('exportData','حفظ نسخة','primary')+btn('importOpen','استرجاع نسخة')+'</div></div>';
+  h+=safetyCard()+trashCard();
   h+='<div class="sec"><h2>عن الدفتر</h2></div><div class="card" style="font-size:14px;color:var(--muted)">'
     +'لو حساب سلّف حساب تاني (جيبي سلّف الدكان مثلًا) سجّلها "سلفة لحساب" وهتظهر في الرئيسية تحت "ديون بين حساباتك". ولو حد سابلك فلوس أمانة سجّلها "استلفت" باسمه، وهتتخصم من "الصافي" لأنها مش بتاعتك. الرصيد بيتحسب من الحركات اللي بتسجّلها. لو نسيت تسجّل حاجة، افتح الحساب واكتب الرصيد الفعلي والدفتر هيسجّل الفرق لوحده كحركة "غير مسجّل" وتعرف حجم اللخبطة.</div>';
   return h;
@@ -608,8 +609,9 @@ Object.assign(ACT,{
   delTx(el){
     if(!el.dataset.armed){el.dataset.armed='1';el.textContent='اضغط تاني للتأكيد';setTimeout(()=>{if(el.isConnected){delete el.dataset.armed;el.textContent='مسح'}},4000);return}
     const x=S.tx.find(y=>y.id===el.dataset.id);if(!x)return;
-    S.tx=S.tx.filter(y=>y.id!==x.id);closeSheet();touch({months:[x.t]});
-    toast('اتمسحت الحركة',()=>{S.tx.push(x);touch({months:[x.t]})});
+    const tid=trashAdd('tx',txLabel(x),{tx:[x]});
+    S.tx=S.tx.filter(y=>y.id!==x.id);closeSheet();touch({meta:true});
+    toast('اتمسحت الحركة (ليها نسخة في سلة المحذوفات)',()=>{trashDrop(tid);S.tx.push(x);touch({meta:true})});
   },
   openAcc(el){openAcc(el.dataset.id)},
   newAcc(){openAcc(null)},
@@ -815,17 +817,19 @@ Object.assign(ACT,{
   smsAdd(el){addSmsItems(!!(el&&el.dataset&&el.dataset.auto))},
   exportData(){exportData()},
   importOpen(){
-    openSheet('<h3>استرجاع نسخة</h3><div style="font-size:14px;color:var(--muted)">الصق محتوى ملف النسخة الاحتياطية. ده هيستبدل كل بيانات الدفتر الحالية.</div>'
-      +'<div class="field"><textarea id="impText" data-in="impText" placeholder="{ ... }"></textarea></div><div class="btns">'+btn('importDo','استرجع','danger')+'</div>');
+    openSheet('<h3>استرجاع نسخة</h3><div class="field"><label for="impFile">اختار ملف النسخة</label><input type="file" id="impFile" accept=".json,application/json" data-in="impFile"></div><div style="font-size:14px;color:var(--muted)">أو الصق محتوى ملف النسخة الاحتياطية. ده هيستبدل كل بيانات الدفتر الحالية.</div>'
+      +'<div class="field"><textarea id="impText" data-in="impText" placeholder="{ ... }"></textarea></div><div id="impInfo" class="warn" hidden></div><div class="btns">'+btn('importDo','استرجع','danger')+'</div>');
   },
   importDo(el){
     const raw=($('#impText')||{}).value||'';let d=null;
     try{d=JSON.parse(raw)}catch(e){}
     if(!d||!Array.isArray(d.accounts)||!Array.isArray(d.tx)||!d.accounts.length){toast('النص ده مش نسخة صالحة');return}
     if(!el.dataset.armed){el.dataset.armed='1';el.textContent='اضغط تاني للتأكيد';return}
-    const months=S.tx.map(x=>x.t).concat(d.tx.map(x=>x.t));
+    const before={at:Date.now(),accounts:S.accounts,tx:S.tx,meta:S.meta};
+    safetySave(before);
     S.accounts=d.accounts;S.tx=d.tx.filter(x=>x&&x.amt>0&&isFinite(x.t));S.meta=Object.assign(freshMeta(),d.meta||{});
-    closeSheet();touch({meta:true,months:months});toast('اتسترجعت النسخة: '+S.tx.length+' حركة');
+    closeSheet();touch({meta:true});
+    toast('اتسترجعت النسخة: '+S.tx.length+' حركة',()=>{S.accounts=before.accounts;S.tx=before.tx;S.meta=before.meta;touch({meta:true});toast('اترجعت بياناتك زي ما كانت')});
   }
 });
 Object.assign(INP,{
@@ -836,7 +840,14 @@ Object.assign(INP,{
   smsAcc2(el){SL(el)[+el.dataset.i].acc2=el.value},
   smsPerson(el){SL(el)[+el.dataset.i].person=el.value},
   smsNote(el){SL(el)[+el.dataset.i].note=el.value},
-  impText(){}
+  impText(el){impInfo(el.value)},
+  impFile(el){
+    const f=el.files&&el.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{const t=$('#impText');if(t){t.value=String(r.result||'');impInfo(t.value)}};
+    r.onerror=()=>toast('مقدرتش أقرا الملف');
+    r.readAsText(f);
+  }
 });
 
 /* ---------- نسخة احتياطية ---------- */
@@ -844,10 +855,11 @@ async function exportData(){
   const d=new Date(),p=n=>String(n).padStart(2,'0');
   const data=JSON.stringify({v:1,exported:d.toISOString(),accounts:S.accounts,meta:S.meta,tx:S.tx});
   const name='daftar-hesabaty-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'.json';
-  if(window.AndroidBridge&&window.AndroidBridge.shareText){window.AndroidBridge.shareText('نسخة دفتر حساباتي',data);return}
+  const mark=()=>{S.meta.lastBackup=Date.now();touch({meta:true})};
+  if(window.AndroidBridge&&window.AndroidBridge.shareText){window.AndroidBridge.shareText('نسخة دفتر حساباتي',data);mark();return}
   try{
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download=name;
-    document.body.appendChild(a);a.click();a.remove();toast('اتحمّلت النسخة');return;
+    document.body.appendChild(a);a.click();a.remove();mark();toast('اتحمّلت النسخة');return;
   }catch(e){}
   openSheet('<h3>النسخة الاحتياطية</h3><div style="font-size:14px;color:var(--muted)">انسخ النص ده واحفظه في مكان أمان.</div>'
     +'<div class="field"><textarea id="expText" readonly>'+esc(data)+'</textarea></div><div class="btns">'+btn('copyExp','نسخ','primary')+'</div>');
@@ -857,6 +869,65 @@ ACT.copyExp=function(){
   const sel=()=>{ta.focus();ta.select()};
   try{navigator.clipboard.writeText(ta.value).then(()=>toast('اتنسخت'),sel)}catch(e){sel()}
 };
+
+/* ---------- أمان البيانات: سلة محذوفات + نسخة أمان + تذكير ---------- */
+const DAY=864e5;
+function txLabel(x){return (TYPES[x.type]&&TYPES[x.type].l||x.type)+' '+fmt(x.amt)+' ج.م'+(x.person?' — '+x.person:x.cat?' — '+x.cat:'')}
+function trashAdd(kind,label,items){
+  const id=gid(),now=Date.now();
+  let t=(S.meta.trash||[]).filter(e=>now-e.at<30*DAY);
+  t.unshift({id:id,at:now,kind:kind,label:label,tx:items.tx||[],contacts:items.contacts||[]});
+  t=t.slice(0,60);
+  while(t.length>1&&JSON.stringify(t).length>300000)t.pop();
+  S.meta.trash=t;return id;
+}
+function trashDrop(id){S.meta.trash=(S.meta.trash||[]).filter(e=>e.id!==id)}
+function trashCard(){
+  const now=Date.now(),t=(S.meta.trash||[]).filter(e=>now-e.at<30*DAY);
+  if(!t.length)return '';
+  return '<div class="sec"><h2>سلة المحذوفات</h2></div><div class="list">'+t.map(e=>'<div class="row"><div class="mid"><div class="t1">'+esc(e.label)+'</div><div class="t2">اتمسح '+esc(new Date(e.at).toLocaleDateString('ar-EG',{day:'numeric',month:'short'}))+' — بتتمسح نهائي بعد ٣٠ يوم</div></div><button class="link" data-act="trashRestore" data-id="'+esc(e.id)+'">رجّعه</button></div>').join('')+'</div>';
+}
+function safetySave(snap){try{localStorage.setItem('hs_safety',JSON.stringify(snap))}catch(e){}}
+function safetyGet(){try{const r=localStorage.getItem('hs_safety');return r?JSON.parse(r):null}catch(e){return null}}
+function safetyCard(){
+  const sn=safetyGet();if(!sn||!Array.isArray(sn.tx))return '';
+  return '<div class="card" style="margin-top:10px"><div class="kv"><span>نسخة أمان قبل آخر استرجاع</span><b>'+esc(new Date(sn.at).toLocaleDateString('ar-EG',{day:'numeric',month:'long'}))+'</b></div><p style="margin:6px 0 0;color:var(--muted);font-size:14px">فيها '+N(String(sn.tx.length))+' حركة. محفوظة على الجهاز ده بس.</p><div class="btns" style="margin-top:8px">'+btn('safetyRestore','ارجع للنسخة دي','danger')+'</div></div>';
+}
+function impInfo(txt){
+  const b=$('#impInfo');if(!b)return;
+  let d=null;try{d=JSON.parse(txt)}catch(e){}
+  if(!d||!Array.isArray(d.accounts)||!Array.isArray(d.tx)){b.hidden=!txt.trim();b.textContent=txt.trim()?'النص ده مش نسخة صالحة':'';return}
+  b.hidden=false;
+  b.textContent='الملف فيه '+d.tx.length+' حركة و'+d.accounts.length+' حساب. هيحل محل '+S.tx.length+' حركة موجودة دلوقتي، وهنحفظ نسخة أمان قبلها.';
+}
+function backupNudge(){
+  const now=Date.now();
+  if(S.tx.length<10)return '';
+  if(now-(S.meta.lastBackup||0)<7*DAY||now<(S.meta.bkSnooze||0))return '';
+  const never=!S.meta.lastBackup;
+  return '<div class="card" style="margin-bottom:12px"><div style="font-weight:700;margin-bottom:4px">'+(never?'لسه ما حمّلتش نسخة احتياطية':'عدّى أكتر من أسبوع على آخر نسخة احتياطية')+'</div><div style="font-size:13px;color:var(--muted)">النسخة بتحميك لو حصل غلط في البيانات. بتاخد ثانيتين.</div><div class="btns" style="margin-top:8px">'+btn('exportData','حمّل نسخة','primary')+btn('bkSnooze','فكّرني بعد ٣ أيام')+'</div></div>';
+}
+Object.assign(ACT,{
+  bkSnooze(){S.meta.bkSnooze=Date.now()+3*DAY;touch({meta:true})},
+  trashRestore(el){
+    const e=(S.meta.trash||[]).find(y=>y.id===el.dataset.id);if(!e)return;
+    const have=new Set(S.tx.map(x=>x.id));
+    const back=(e.tx||[]).filter(x=>!have.has(x.id));
+    S.tx=S.tx.concat(back);
+    const cs=contacts();(e.contacts||[]).forEach(k=>{if(!cs.some(c=>c.n===k.n))cs.push(k)});
+    trashDrop(e.id);touch({meta:true});
+    toast('اترجّع: '+e.label);
+  },
+  safetyRestore(el){
+    const sn=safetyGet();if(!sn)return;
+    if(!el.dataset.armed){el.dataset.armed='1';el.textContent='اضغط تاني للتأكيد';return}
+    const before={at:Date.now(),accounts:S.accounts,tx:S.tx,meta:S.meta};
+    safetySave(before);
+    S.accounts=sn.accounts;S.tx=sn.tx;S.meta=Object.assign(freshMeta(),sn.meta||{});
+    touch({meta:true});
+    toast('رجعت للنسخة دي: '+S.tx.length+' حركة',()=>{S.accounts=before.accounts;S.tx=before.tx;S.meta=before.meta;touch({meta:true})});
+  }
+});
 
 /* ---------- تشغيل ---------- */
 const app=$('#app');
@@ -1740,8 +1811,9 @@ Object.assign(ACT,{
     const oldTx=S.tx.filter(x=>x.person===name),cs=contacts(),oldC=cs.filter(k=>k.n===name);
     S.tx=S.tx.filter(x=>x.person!==name);
     S.meta.contacts=cs.filter(k=>k.n!==name);
+    const tid=trashAdd('person',name+(oldTx.length?' ('+oldTx.length+' حركة)':''),{tx:oldTx,contacts:oldC});
     closeSheet();touch({meta:true});
-    toast('اتمسح '+name,()=>{S.tx=S.tx.concat(oldTx);S.meta.contacts=contacts().concat(oldC);touch({meta:true})});
+    toast('اتمسح '+name+' (ليه نسخة في سلة المحذوفات)',()=>{trashDrop(tid);S.tx=S.tx.concat(oldTx);S.meta.contacts=contacts().concat(oldC);touch({meta:true})});
   }
 });
 Object.assign(INP,{peName(el){PE.name=el.value},peNum(el){PE.num=el.value}});
@@ -1924,7 +1996,7 @@ const _vHome2=vHome;
 vHome=function(){
   let h=_vHome2();
   h=h.split(VCBTN).join('');
-  return h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
+  return backupNudge()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
 };
 const _txRow2=txRow;
 txRow=function(x){
