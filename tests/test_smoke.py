@@ -21,6 +21,15 @@ def scenario(pg):
     chk(pg, 'home')
     for tab in ['log', 'people', 'sms', 'more', 'home']:
         pg.click('.nav .tab[data-tab="%s"]' % tab); pg.wait_for_timeout(200); chk(pg, tab)
+    # التقارير والميزانية والفلاتر
+    pg.click('[data-act="tab"][data-tab="rep"]'); pg.wait_for_timeout(250); chk(pg, 'rep')
+    for sc_ in ['biz', 'per', 'all']:
+        pg.click('[data-act="rScope"][data-id="%s"]' % sc_); pg.wait_for_timeout(150); chk(pg, 'rep ' + sc_)
+    pg.click('[data-act="rOff"][data-d="-1"]'); pg.wait_for_timeout(150); chk(pg, 'rep prev'); pg.click('[data-act="rOff"][data-d="1"]')
+    pg.click('[data-act="budgetEdit"] >> nth=0'); pg.wait_for_timeout(250); pg.fill('#bgAmt', '100'); pg.click('[data-act="bgSave"]'); pg.wait_for_timeout(200); chk(pg, 'budget')
+    pg.click('.nav .tab[data-tab="log"]'); pg.click('[data-act="fRange"][data-id="m1"]'); pg.wait_for_timeout(150); chk(pg, 'log range')
+    pg.click('[data-act="fRange"][data-id="all"]')
+    pg.click('.nav .tab[data-tab="home"]'); pg.wait_for_timeout(200)
     # شاشة تسجيل حركة
     pg.click('[data-act="quick"][data-type="exp"]'); pg.wait_for_timeout(300); chk(pg, 'newTx'); pg.keyboard.press('Escape')
     # شخص + كشف حساب + رسالة واتساب
