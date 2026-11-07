@@ -31,21 +31,22 @@ def fs_stub(tx):
             "else cb({exists:()=>false,metadata:{fromCache:true},data:()=>null})},0);return()=>{}};"
             "export const setDoc=()=>Promise.resolve();export const writeBatch=()=>({set(){},delete(){},commit(){return Promise.resolve()}});") % json.dumps(tx)
 
-def run(scenario, tx=(), public=None, port=8777, width=390, height=844):
+def run(scenario, tx=(), public=None, port=8777, width=390, height=844, path='index.html', init=None):
     public = public or os.path.join(os.path.dirname(__file__), '..', 'public')
     srv = subprocess.Popen(['python3', '-m', 'http.server', str(port), '-d', public], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
     try:
         with sync_playwright() as p:
             b = p.chromium.launch()
-            pg = b.new_page(viewport={'width': width, 'height': height})
+            pg = b.new_context(viewport={'width': width, 'height': height}, service_workers='block').new_page()
             errs = []
             pg.on('pageerror', lambda e: errs.append(str(e)))
             def route(r):
                 u = r.request.url
                 r.fulfill(body=APP if 'firebase-app' in u else AUTH if 'firebase-auth' in u else fs_stub(list(tx)), content_type='application/javascript')
             pg.route(re.compile(r'gstatic\.com/firebasejs'), route)
-            pg.goto('http://localhost:%d/index.html' % port)
+            if init: pg.add_init_script(init)
+            pg.goto('http://localhost:%d/%s' % (port, path))
             pg.wait_for_timeout(900)
             scenario(pg)
             if errs: print('PAGE ERRORS:', errs)

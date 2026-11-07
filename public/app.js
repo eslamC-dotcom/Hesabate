@@ -259,7 +259,7 @@ function monthStats(off){
   });
   return {cats:Object.values(cats).sort((a,b)=>(b.reg+b.once)-(a.reg+a.once)),exp:exp,inc:inc,once:once};
 }
-function vHome(){
+function vHomeBase(){
   const T=totals(),b=T.b,M=monthStats(ui.mOff),MP=monthStats((ui.mOff||0)-1);
   const first=!S.tx.length&&liveAccs().every(a=>!(+a.open));
   let h='<section class="hero"><div class="lbl">الفلوس اللي معاك دلوقتي</div><div class="big">'+N(fmt(T.cash))+'<small>ج.م</small></div>'
@@ -693,14 +693,22 @@ function splitMsgs(t){
   return blocks;
 }
 function hashStr(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return (h>>>0).toString(36)+s.length}
-function guessAcc(m){
+function guessAccBase(m){
   const L=liveAccs();
   for(let i=0;i<L.length;i++)if(L[i].name.length>=3&&m.indexOf(L[i].name)>=0)return L[i].id;
   if(/فودافون|vodafone|vf\s?cash|اتصالات كاش|etisalat cash|orange cash|اورنج كاش|wallet|محفظة/i.test(m)){const w=L.find(a=>a.kind==='wallet');if(w)return w.id}
   if(/بنك|bank|cib|nbe|الأهلي|الاهلي|qnb|hsbc|banque|بطاقة|card|visa|mastercard|meeza|ميزة|instapay|انستا/i.test(m)){const b=L.find(a=>a.kind==='bank');if(b)return b.id}
   return L[0]?L[0].id:null;
 }
+/* تحليل الرسالة على مراحل بالترتيب:
+   parseBase (مبلغ/رصيد/اتجاه/تاريخ) ← parseVodafone (رقم العملية والرسوم والاسم) ← parseBank (CIB) ← parseElectric (شحنة كهرباء) */
 function parseMsg(raw,dateMs){
+  let p=parseBase(raw,dateMs);if(!p)return p;
+  p=parseVodafone(p,dateMs);
+  p=parseBank(p,dateMs);
+  return parseElectric(p,dateMs);
+}
+function parseBase(raw,dateMs){
   const m=normDigits(raw).replace(/\s+/g,' ').trim();
   const am=findAmounts(m);let amt=null,bal=null;
   const a=am.filter(x=>!x.bal)[0],b=am.filter(x=>x.bal)[0];
@@ -929,6 +937,9 @@ Object.assign(ACT,{
   }
 });
 
+/* خُطّاف للاختبارات التلقائية فقط (بيشتغل لما الرابط فيه ?__test) */
+if(/[?&]__test\b/.test(location.search))window.__hs={parseMsg:(...a)=>parseMsg(...a),splitMsgs:(...a)=>splitMsgs(...a),guessAcc:(...a)=>guessAcc(...a)};
+
 /* ---------- تشغيل ---------- */
 const app=$('#app');
 app.addEventListener('click',ev=>{const el=ev.target.closest('[data-act]');if(!el)return;const f=ACT[el.dataset.act];if(f)f(el,ev)});
@@ -1066,6 +1077,7 @@ function balanceAt(id,t){
   return v;
 }
 function reconHtml(){
+  fixSmsBal();
   const sb=S.meta.smsBal||{},ids=Object.keys(sb).filter(id=>accById(id)&&!accById(id).hidden);
   let h='<div class="sec"><h2>مطابقة الرصيد مع الرسائل</h2></div>';
   if(!ids.length)return h+'<div class="empty" style="padding:10px">لما تضيف رسايل فيها رصيد، هقارن رصيد كل رسالة بالدفتر وقت وصولها وأقولك فين الفرق.</div>';
@@ -1095,19 +1107,6 @@ function vcNote(){
   b.innerHTML='<div class="warn" style="margin-top:6px">قبل التحويل: '+esc(balTxt(p.bal))+(isNaN(amt)?'':'، وبعده: '+esc(balTxt(after)))+'</div>';
 }
 const dm=t=>{const d=new Date(t);return d.getDate()+'/'+(d.getMonth()+1)};
-function debtMsg(name){
-  const p=people().find(q=>q.name===name)||{bal:0};
-  const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).sort((a,b)=>a.t-b.t);
-  const MAX=6,rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
-  let prior=0;older.forEach(x=>prior+=TYPES[x.type].debt*x.amt);prior=Math.round(prior*100)/100;
-  const W={lend:'سلف',repay_in:'سداد منك',borrow:'استلاف منك',repay_out:'سداد ليك'};
-  const L=['حسابنا لحد دلوقتي:'];
-  if(older.length&&Math.abs(prior)>0.004)L.push('• قبل كده: '+dsc(prior));
-  rows.forEach(x=>{const o=x.op&&opBy(x.op);L.push('• '+dm(x.t)+': '+(o?o.l:W[x.type])+' '+fmt(x.amt)+' جنيه')});
-  if(!rows.length)L.push('• لسه مفيش حركات');
-  L.push(Math.abs(p.bal)<0.005?'حسابنا متصفّي.':'الباقي '+dsc(p.bal)+'.');
-  return L.join('\n');
-}
 let WA=null;
 function waSheet(name,num,intro,msg0){
   const c=contactFor(name);
@@ -1509,9 +1508,7 @@ function parseVfDate(m){
   }
   return null;
 }
-const _parseOld=parseMsg;
-parseMsg=function(raw,dateMs){
-  const p=_parseOld(raw,dateMs);if(!p)return p;
+function parseVodafone(p,dateMs){
   const m=p.m,om=m.match(/رقم\s*العملية\s*:?\s*(\d{6,})/);
   p.opid=om?om[1]:null;
   const mm=p.opid?m.replace(p.opid,' '):m;
@@ -1744,9 +1741,7 @@ function parseBankDate(m){
   if(r)return mk(+r[3],+r[2],+r[1],+(r[4]||12),+(r[5]||0));
   return null;
 }
-const _parseV=parseMsg;
-parseMsg=function(raw,dateMs){
-  const p=_parseV(raw,dateMs);if(!p)return p;
+function parseBank(p,dateMs){
   const m=p.m;
   const l=m.match(L4_RE);p.last4=l?l[1]:null;
   const rf=m.match(/رقم\s*مرجعي\s*:?\s*([A-Za-z0-9]{5,})/);if(rf)p.opid=rf[1];
@@ -1761,12 +1756,12 @@ parseMsg=function(raw,dateMs){
   if(!p.hasDate){const bt=parseBankDate(m);if(bt!=null){p.hasDate=true;if(!dateMs)p.t=bt}}
   return p;
 };
-const _guess2=guessAcc;
-guessAcc=function(m){
+/* تخمين الحساب: الأول بآخر 4 أرقام الكارت وكريدت، وبعدين التخمين الأساسي، وبعدين تفضيل البنك لرسايل الحساب */
+function guessAcc(m){
   const map=S.meta.acct4||{},l=m.match(L4_RE),L=liveAccs();
   if(l&&map[l[1]]){const a=accById(map[l[1]]);if(a&&!a.hidden)return a.id}
   if(/credit\s*card|بطاقة\s*ائتمان|كريدت/i.test(m)){const c=L.find(a=>/كريدت|credit|visa|فيزا|بطاقة|كارد/i.test(a.name));if(c)return c.id}
-  const g=_guess2(m);
+  const g=guessAccBase(m);
   if(/account\s+ending|حسابك\s+المنتهي|IPN|instapay|cib\.eg|credit\s*card/i.test(m)&&!L.some(a=>a.id===g&&a.kind==='bank')){
     const b=L.find(a=>a.kind==='bank');if(b&&!/فودافون|vodafone/i.test(m))return b.id;
   }
@@ -1831,8 +1826,6 @@ ACT.pickContact=async function(el,ev){
 
 /* ---------- زر تحويل فودافون كاش ظاهر في الرئيسية والناس ---------- */
 const VCBTN='<div class="btns" style="margin:0 0 12px"><button class="btn primary" data-act="vcOpen" style="width:100%">تحويل فودافون كاش (من جوه التطبيق)</button></div>';
-const _vHome=vHome;
-vHome=function(){const h=_vHome();return h.indexOf('<div class="qa">')>=0?h.replace('<div class="qa">',VCBTN+'<div class="qa">'):VCBTN+h};
 const _vPeople=vPeople;
 vPeople=function(){return VCBTN+_vPeople()};
 
@@ -1900,9 +1893,7 @@ Object.assign(INP,{
 });
 
 /* ---------- شحن كهرباء (شراء)، وتصحيح حساب الرصيد ---------- */
-const _parseE=parseMsg;
-parseMsg=function(raw,dateMs){
-  const p=_parseE(raw,dateMs);if(!p)return p;
+function parseElectric(p,dateMs){
   const m=p.m;
   if(/تم\s+شراء\s+شحنة\s+كهرباء|شحنة\s+كهرباء/.test(m)){
     p.dir='out';p.elec=true;p.num=null;p.fee=0;
@@ -1921,8 +1912,6 @@ function fixSmsBal(){
   Object.keys(sb).forEach(id=>{if(!keep[id])delete sb[id]});
   S.meta.sbFix=1;setTimeout(()=>touch({meta:true}),0);
 }
-const _reconH=reconHtml;
-reconHtml=function(){fixSmsBal();return _reconH()};
 const _addSms2=addSmsItems;
 addSmsItems=function(auto){
   const src=auto?(ui.sms.auto&&ui.sms.auto.items):ui.sms.items,its=(src||[]).filter(i=>i.on);
@@ -1982,7 +1971,7 @@ function stmtMsg(name,head,extra){
   }
   return L.join('\n');
 }
-debtMsg=function(name){return stmtMsg(name,'')};
+function debtMsg(name){return stmtMsg(name,'')}
 
 /* ---------- شكل الرئيسية والسجل ---------- */
 const TILES='<div class="tiles">'
@@ -1992,10 +1981,9 @@ const TILES='<div class="tiles">'
   +'<button class="tile t-p" data-act="pickPerson"><span class="ti">👤</span>عملية مع شخص</button>'
   +'<button class="tile t-vc" data-act="vcOpen"><span class="ti">📲</span>تحويل فودافون كاش من التطبيق</button>'
   +'</div>';
-const _vHome2=vHome;
-vHome=function(){
-  let h=_vHome2();
-  h=h.split(VCBTN).join('');
+/* الرئيسية = الأصلية مع استبدال صف الإجراءات بالمربعات + تذكير النسخة الاحتياطية */
+function vHome(){
+  const h=vHomeBase();
   return backupNudge()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
 };
 const _txRow2=txRow;
