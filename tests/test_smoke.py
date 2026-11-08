@@ -45,6 +45,16 @@ def scenario(pg):
     m = pg.input_value('#waMsg')
     if 'تحويل فودافون كاش' not in m or 'سلف' in m: BAD.append('wa: سلف من فودافون كاش لازم تتكتب تحويل فودافون كاش')
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+    # زر السداد السريع + ميعاد السداد
+    pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)
+    pg.click('.prow .pay >> nth=0'); pg.wait_for_timeout(300); chk(pg, 'quick pay')
+    if 'سداد' not in pg.inner_text('.sheet h3'): BAD.append('quick pay: شاشة السداد ما فتحتش')
+    pg.keyboard.press('Escape')
+    pg.click('#view .row:has-text("أحمد")'); pg.wait_for_timeout(250)
+    pg.click('[data-act="personDue"]'); pg.wait_for_timeout(250); chk(pg, 'due sheet')
+    pg.fill('#dueDate', '2026-10-30'); pg.click('[data-act="dueSave"]'); pg.wait_for_timeout(250)
+    pg.click('.nav .tab[data-tab="home"]'); pg.wait_for_timeout(250); chk(pg, 'home due')
+    if 'ديون ميعادها قرّب' not in pg.inner_text('#view') or 'متأخر' not in pg.inner_text('#view'): BAD.append('due: تنبيه الميعاد مظهرش في الرئيسية')
     # حساب
     pg.click('.nav .tab[data-tab="more"]'); pg.wait_for_timeout(200)
     pg.click('[data-act="openAcc"] >> nth=0'); pg.wait_for_timeout(300); chk(pg, 'acc'); pg.keyboard.press('Escape')

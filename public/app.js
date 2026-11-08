@@ -358,9 +358,13 @@ function vPeople(){
   const P=peopleAll().sort((a,b)=>Math.abs(b.bal)-Math.abs(a.bal)||b.last-a.last);
   const mine=P.filter(p=>p.bal>0),owe=P.filter(p=>p.bal<0),done=P.filter(p=>p.bal===0);
   const row=(p)=>{
+    const r=rowOf(p);
+    return Math.abs(p.bal)<0.005?r:'<div class="prow">'+r+'<button class="pay" data-act="personPay" data-p="'+esc(encodeURIComponent(p.name))+'" aria-label="سداد '+esc(p.name)+'">سداد</button></div>';
+  };
+  const rowOf=(p)=>{
     const cls=p.bal>0?'debt':(p.bal<0?'out':'flat');
     const txt=p.bal>0?'عليه':(p.bal<0?'عليك له':'متصفّي');
-    return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">'+(p.last?'آخر حركة '+esc(dayLabel(p.last)):'مفيش حركات لسه')+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
+    return '<button class="row" data-act="openPerson" data-p="'+esc(encodeURIComponent(p.name))+'"><div class="mid"><div class="t1">'+esc(p.name)+'</div><div class="t2">'+(dueTxt(p)||(p.last?'آخر حركة '+esc(dayLabel(p.last)):'مفيش حركات لسه'))+'</div></div><div class="amt '+cls+'">'+(p.bal?N(fmt(Math.abs(p.bal)))+' <span style="font-weight:400;font-size:12px">'+txt+'</span>':txt)+'</div></button>';
   };
   let h='<div class="sec"><h2>الناس والديون</h2></div><div class="btns" style="margin-top:0">'
     +btn('pickPerson','عملية مع شخص','primary')+btn('addPerson','+ إضافة شخص')+'</div>';
@@ -975,7 +979,7 @@ function budgetAlert(){
   const R=repData(0,'all'),hot=[];
   R.cats.forEach(c=>{const b=bg[c.c];if(b>0&&c.v/b>=0.8)hot.push({c:c.c,v:c.v,b:b})});
   if(!hot.length)return '';
-  return '<div class="warn" style="margin-bottom:12px">'+hot.map(h=>'ميزانية '+esc(h.c)+': صرفت '+N(Math.round(h.v/h.b*100))+'٪ ('+N(fmt(h.v))+' من '+N(fmt(h.b))+')').join('<br>')+'</div>';
+  return '<div class="alert" style="margin-bottom:12px">'+hot.map(h=>'ميزانية '+esc(h.c)+': صرفت '+N(Math.round(h.v/h.b*100))+'٪ ('+N(fmt(h.v))+' من '+N(fmt(h.b))+')').join('<br>')+'</div>';
 }
 function vRep(){
   const off=ui.rOff||0,sc=ui.rScope||'all',R=repData(off,sc),P=repData(off-1,sc),bg=S.meta.budgets||{};
@@ -1054,6 +1058,56 @@ Object.assign(ACT,{
   }
 });
 Object.assign(INP,{bgAmt(el){BG.v=el.value}});
+
+/* ---------- ميعاد سداد الديون ---------- */
+const dayStart=t=>{const d=new Date(t);d.setHours(0,0,0,0);return d.getTime()};
+function dueDays(c){return c&&c.due?Math.round((dayStart(c.due)-dayStart(Date.now()))/864e5):null}
+const isoDate=t=>{const d=new Date(t),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())};
+function dueWord(d){return d<0?'متأخر '+N(String(-d))+' يوم':(d===0?'النهارده':(d===1?'بكرة':'بعد '+N(String(d))+' أيام'))}
+function dueTxt(p){
+  const c=contactFor(p.name),d=dueDays(c);
+  if(d==null||Math.abs(p.bal)<0.005)return '';
+  return '<span style="color:var(--'+(d<0?'out':(d<=3?'debt':'muted'))+')">'+(d<=3?'السداد: '+dueWord(d):'ميعاد السداد '+esc(dm(c.due)))+'</span>';
+}
+function dueAlert(){
+  const items=[];
+  people().forEach(p=>{if(Math.abs(p.bal)<0.005)return;const d=dueDays(contactFor(p.name));if(d!=null&&d<=3)items.push({p:p,d:d})});
+  if(!items.length)return '';
+  items.sort((a,b)=>a.d-b.d);
+  return '<div class="alert" style="margin-bottom:12px"><b>ديون ميعادها قرّب</b><br>'+items.map(i=>'<button class="link" data-act="openPerson" data-p="'+esc(encodeURIComponent(i.p.name))+'">'+esc(i.p.name)+'</button> '+(i.p.bal>0?'عليه ':'عليك له ')+N(fmt(Math.abs(i.p.bal)))+' ج.م — '+dueWord(i.d)).join('<br>')+'</div>';
+}
+let DU=null;
+function dueSheet(){
+  openSheet('<h3>ميعاد سداد '+esc(DU.name)+'</h3><div style="font-size:14px;color:var(--muted)">هنفكّرك في الرئيسية قبل الميعاد بـ ٣ أيام، وهيظهر في كشف الحساب اللي بتبعته.</div>'
+    +'<div class="field"><label for="dueDate">التاريخ</label><input type="date" id="dueDate" value="'+esc(DU.val)+'" data-in="dueDate"></div>'
+    +'<div class="chips" style="margin-bottom:8px">'+[['7','بعد أسبوع'],['14','بعد أسبوعين'],['30','بعد شهر'],['eom','آخر الشهر']].map(k=>'<button class="chip sm" data-act="dueQuick" data-d="'+k[0]+'">'+k[1]+'</button>').join('')+'</div>'
+    +'<div class="btns">'+btn('dueSave','حفظ الميعاد','primary')+(DU.had?btn('dueClear','شيل الميعاد'):'')+'</div>',()=>openPerson(DU.name));
+}
+Object.assign(ACT,{
+  personDue(el){
+    const name=decodeURIComponent(el.dataset.p),c=contactFor(name);
+    DU={name:name,val:c&&c.due?isoDate(c.due):'',had:!!(c&&c.due)};
+    dueSheet();
+  },
+  dueQuick(el){
+    const d=el.dataset.d,n=new Date();
+    const t=d==='eom'?new Date(n.getFullYear(),n.getMonth()+1,0):new Date(n.getFullYear(),n.getMonth(),n.getDate()+(+d));
+    DU.val=isoDate(t.getTime());const i=$('#dueDate');if(i)i.value=DU.val;
+  },
+  dueSave(){
+    if(!DU.val){toast('اختار تاريخ الأول');return}
+    const t=new Date(DU.val+'T12:00:00').getTime();
+    if(!isFinite(t)){toast('التاريخ مش مظبوط');return}
+    const cs=contacts();let c=cs.find(k=>k.n===DU.name);if(!c){c={n:DU.name,p:''};cs.push(c)}
+    c.due=t;closeSheet();touch({meta:true});toast('اتسجّل ميعاد سداد '+DU.name+': '+dm(t));
+  },
+  dueClear(){
+    const c=contactFor(DU.name);if(!c)return;
+    const old=c.due,nm=DU.name;delete c.due;closeSheet();touch({meta:true});
+    toast('اتشال الميعاد',()=>{const k=contactFor(nm);if(k){k.due=old;touch({meta:true})}});
+  }
+});
+Object.assign(INP,{dueDate(el){if(DU)DU.val=el.value}});
 
 /* ---------- تشغيل ---------- */
 const app=$('#app');
@@ -1422,7 +1476,7 @@ function openPerson(name,back){
     +'<div class="btns" style="margin:8px 0 0">'+btn('personPay','سداد','primary','data-p="'+esc(e)+'"')+btn('personEdit','تعديل الاسم والرقم','','data-p="'+esc(e)+'"')+btn('personDel','حذف','danger','data-p="'+esc(e)+'"')+'</div>'
     +'<div style="font-size:26px;font-weight:700;margin-block:6px 2px" class="'+(p.bal>0.004?'amt debt':(p.bal<-0.004?'amt out':''))+'">'
     +(Math.abs(p.bal)<0.005?'<small style="font-size:16px">حسابكم متصفّي</small>':N(fmt(Math.abs(p.bal)))+' <small style="font-size:14px;font-weight:500">ج.م '+(p.bal>0?'عليه ليك':'عليك له')+'</small>')+'</div>';
-  h+='<div class="btns" style="margin:6px 0 4px">'+btn('waOpen','ابعت كشف الحساب على واتساب','primary','data-p="'+esc(e)+'"')+'</div>';
+  h+='<div class="btns" style="margin:6px 0 4px">'+btn('waOpen','ابعت كشف الحساب على واتساب','primary','data-p="'+esc(e)+'"')+(Math.abs(p.bal)>=0.005?btn('personDue','ميعاد السداد'+(c&&c.due?': '+dm(c.due):''),'','data-p="'+esc(e)+'"'):'')+'</div>';
   groups.forEach(g=>{
     h+='<div class="lbl2" style="margin-top:14px">'+esc(g)+'</div><div class="qa" style="margin:6px 0 0">'
       +OPS.filter(o=>o.g===g).map(o=>'<button class="btn" data-act="opStart" data-k="'+o.k+'" data-p="'+esc(e)+'">'+esc(o.l)+'</button>').join('')+'</div>';
@@ -2096,6 +2150,8 @@ function stmtMsg(name,head,extra){
     if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
     else L.push('💰 *الإجمالي'+(net>0?' عليك: ':' ليك عندي: ')+fmt(Math.abs(net))+' ج*');
   }
+  const cd=contactFor(name);
+  if(cd&&cd.due&&net>0.004)L.push('📅 ميعاد السداد: '+dm(cd.due));
   return L.join('\n');
 }
 function debtMsg(name){return stmtMsg(name,'')}
@@ -2111,7 +2167,7 @@ const TILES='<div class="tiles">'
 /* الرئيسية = الأصلية مع استبدال صف الإجراءات بالمربعات + تذكير النسخة الاحتياطية */
 function vHome(){
   const h=vHomeBase();
-  return backupNudge()+budgetAlert()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
+  return backupNudge()+budgetAlert()+dueAlert()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
 };
 const _txRow2=txRow;
 txRow=function(x){
