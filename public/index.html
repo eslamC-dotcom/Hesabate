@@ -67,6 +67,16 @@ header.top .date{color:var(--muted);font-size:13px}
 .rpair i{display:block;width:11px;min-height:2px;border-radius:3px 3px 0 0}
 .rl{font-size:12px;color:var(--fg)}
 .rv{font-size:11px;color:var(--muted)}
+.rcr{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 0}
+.lock{position:fixed;inset:0;z-index:9999;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px}
+.lock .lt{font-family:var(--f-disp);font-size:26px;font-weight:700}
+.lock .ls{color:var(--muted);font-size:14px;min-height:20px}
+.ldots{display:flex;gap:14px;direction:ltr}
+.ldots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--accent);display:block}
+.ldots i.on{background:var(--accent)}
+.kpad{display:grid;grid-template-columns:repeat(3,72px);gap:14px;direction:ltr;margin-top:6px}
+.kpad button{height:72px;border-radius:50%;background:var(--surface);border:1px solid var(--line);font-size:26px;font-weight:600;color:var(--fg)}
+.kpad button:active{background:var(--chip)}
 .prow{display:flex;align-items:center;border-bottom:1px solid var(--line)}
 .prow:last-child{border-bottom:0}
 .prow .row{border-bottom:0;flex:1;min-width:0;width:auto}

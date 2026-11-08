@@ -12,6 +12,8 @@ from test_golden import TX, INIT, FIXED
 from msgs import MSGS
 BAD = []
 
+def S_tx_count(pg): return pg.query_selector_all('#view .row')
+
 def chk(pg, label):
     t = pg.inner_text('body')
     for w in ('undefined', 'NaN', '[object', 'null'):
@@ -55,6 +57,36 @@ def scenario(pg):
     pg.fill('#dueDate', '2026-10-30'); pg.click('[data-act="dueSave"]'); pg.wait_for_timeout(250)
     pg.click('.nav .tab[data-tab="home"]'); pg.wait_for_timeout(250); chk(pg, 'home due')
     if 'ديون ميعادها قرّب' not in pg.inner_text('#view') or 'متأخر' not in pg.inner_text('#view'): BAD.append('due: تنبيه الميعاد مظهرش في الرئيسية')
+    # المظهر
+    pg.click('.nav .tab[data-tab="more"]'); pg.wait_for_timeout(200)
+    pg.click('[data-act="theme"][data-m="dark"]'); pg.wait_for_timeout(150)
+    if pg.evaluate("document.documentElement.dataset.theme")!='dark': BAD.append('theme: الداكن ما اشتغلش')
+    pg.click('[data-act="theme"][data-m="auto"]'); pg.wait_for_timeout(150)
+    if pg.evaluate("document.documentElement.dataset.theme")!=None: BAD.append('theme: التلقائي ما رجعش')
+    # حركة متكررة: تتضاف، وتظهر مستحقة لما اليوم يعدّي، وتتسجّل
+    pg.click('[data-act="recurNew"]'); pg.wait_for_timeout(250); chk(pg, 'recur sheet')
+    pg.fill('#rcNote', 'إيجار تجريبي'); pg.fill('#rcAmt', '٧٠٠'); pg.fill('#rcDay', '10'); pg.click('[data-act="rcSave"]'); pg.wait_for_timeout(250)
+    n0 = len(S_tx_count(pg))
+    pg.evaluate("window.__now = window.__now + 9*86400000"); pg.click('.nav .tab[data-tab="home"]'); pg.wait_for_timeout(250); chk(pg, 'recur due')
+    if 'حركات متكررة مستحقة' not in pg.inner_text('#view'): BAD.append('recur: مظهرتش مستحقة')
+    pg.click('[data-act="recurDo"]'); pg.wait_for_timeout(250)
+    if 'حركات متكررة مستحقة' in pg.inner_text('#view'): BAD.append('recur: لسه مستحقة بعد التسجيل')
+    pg.click('.nav .tab[data-tab="log"]'); pg.wait_for_timeout(200)
+    if 'إيجار تجريبي' not in pg.inner_text('#view'): BAD.append('recur: الحركة ما اتسجّلتش')
+    pg.evaluate("window.__now = window.__now - 9*86400000")
+    # قفل التطبيق
+    pg.click('.nav .tab[data-tab="more"]'); pg.wait_for_timeout(200)
+    pg.click('[data-act="pinSetup"]'); pg.wait_for_timeout(200); pg.fill('#pin1', '1234'); pg.fill('#pin2', '1234'); pg.click('[data-act="pinSave"]'); pg.wait_for_timeout(400)
+    pg.click('[data-act="lockNow"]'); pg.wait_for_timeout(200)
+    if pg.locator('#lock').count()!=1: BAD.append('lock: القفل ما ظهرش')
+    for k in '0000': pg.click('[data-act="lockKey"][data-k="%s"]' % k)
+    pg.wait_for_timeout(400)
+    if pg.locator('#lock').count()!=1 or 'غلط' not in pg.inner_text('#lockMsg'): BAD.append('lock: رقم غلط لازم يفضل مقفول')
+    for k in '1234': pg.click('[data-act="lockKey"][data-k="%s"]' % k)
+    pg.wait_for_timeout(400)
+    if pg.locator('#lock').count()!=0: BAD.append('lock: الرقم الصح ما فتحش')
+    pg.click('[data-act="pinOff"]'); pg.wait_for_timeout(200); pg.fill('#pinCur', '1234'); pg.click('[data-act="pinSave"]'); pg.wait_for_timeout(400)
+    if pg.evaluate("localStorage.getItem('hs_pin')") is not None: BAD.append('lock: شيل القفل ما اشتغلش')
     # حساب
     pg.click('.nav .tab[data-tab="more"]'); pg.wait_for_timeout(200)
     pg.click('[data-act="openAcc"] >> nth=0'); pg.wait_for_timeout(300); chk(pg, 'acc'); pg.keyboard.press('Escape')

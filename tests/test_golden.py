@@ -11,7 +11,8 @@ from tools.harness import run
 from msgs import MSGS
 
 FIXED = 1793600000000  # 2026-11-02 تقريبًا
-INIT = ("(()=>{const R=Date,F=%d;class D extends R{constructor(...a){a.length?super(...a):super(F)}static now(){return F}};window.Date=D})()" % FIXED)
+# window.__now ممكن الاختبار يغيّره عشان "يعدّي" الوقت
+INIT = ("(()=>{const R=Date;window.__now=%d;class D extends R{constructor(...a){a.length?super(...a):super(window.__now)}static now(){return window.__now}};window.Date=D})()" % FIXED)
 DAY = 86400000
 TX = [
  {'id':'t1','t':FIXED-5*DAY,'type':'inc','amt':1200,'to':'a_shop','cat':'مبيعات','note':'إيراد'},

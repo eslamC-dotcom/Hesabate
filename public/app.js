@@ -379,6 +379,7 @@ function vPeople(){
 function vMore(){
   const b=balances();
   let h='<div class="sec"><h2>التقارير</h2></div><div class="btns">'+btn('tab','تقارير الشهور والفئات والميزانية','primary','data-tab="rep"')+'</div>';
+  h+=moreExtras();
   h+='<div class="sec"><h2>حساباتي</h2></div><div class="list">';
   S.accounts.forEach(a=>{
     h+='<button class="row" data-act="openAcc" data-id="'+esc(a.id)+'"><span class="dot" style="background:'+esc(a.color)+'"></span><div class="mid"><div class="t1">'+esc(a.name)+(a.hidden?'<span class="pill">مخفي</span>':'')+'</div><div class="t2">'+esc(KINDS[a.kind]||'')+'</div></div><div class="amt flat">'+N(fmt(b[a.id]))+'</div></button>';
@@ -1108,6 +1109,156 @@ Object.assign(ACT,{
   }
 });
 Object.assign(INP,{dueDate(el){if(DU)DU.val=el.value}});
+
+/* ---------- المظهر + حركات متكررة + قفل التطبيق ---------- */
+const THEME_KEY='hs_theme',PIN_KEY='hs_pin';
+function getTheme(){try{return localStorage.getItem(THEME_KEY)||'auto'}catch(e){return 'auto'}}
+function applyTheme(m){
+  const r=document.documentElement;
+  if(m==='light'||m==='dark')r.dataset.theme=m;else delete r.dataset.theme;
+  const L='#0F5C57',D='#0B1211';
+  document.querySelectorAll('meta[name="theme-color"]').forEach((mt,i)=>{mt.content=m==='dark'?D:(m==='light'?L:(i===0?L:D))});
+}
+applyTheme(getTheme());
+const pinOn=()=>{try{return !!localStorage.getItem(PIN_KEY)}catch(e){return false}};
+async function pinHash(p){
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('hesabaty:'+p));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+const curKey=()=>mk(Date.now());
+function recurDue(r){
+  const n=new Date(),dim=new Date(n.getFullYear(),n.getMonth()+1,0).getDate();
+  return r.last!==curKey()&&n.getDate()>=Math.min(r.day,dim);
+}
+const recurLbl=r=>(r.note||r.cat||(r.type==='inc'?'دخل':'مصروف'));
+function recurAlert(){
+  const due=(S.meta.recur||[]).filter(recurDue);
+  if(!due.length)return '';
+  return '<div class="alert" style="margin-bottom:12px"><b>حركات متكررة مستحقة</b>'+due.map(r=>'<div class="rcr"><span>'+esc(recurLbl(r))+' — '+N(fmt(r.amt))+' ج.م</span><span><button class="link" data-act="recurDo" data-id="'+esc(r.id)+'">سجّل</button><button class="link" data-act="recurSkip" data-id="'+esc(r.id)+'" style="color:var(--muted)">تخطّي الشهر</button></span></div>').join('')+'</div>';
+}
+function recurList(){
+  const L=S.meta.recur||[];
+  if(!L.length)return '<div class="empty" style="padding:10px">مفيش حركات متكررة لسه (إيجار، قسط، اشتراك...).</div>';
+  return '<div class="list">'+L.map(r=>'<div class="prow"><div class="row"><div class="mid"><div class="t1">'+esc(recurLbl(r))+'</div><div class="t2">يوم '+N(String(r.day))+' كل شهر · '+esc(accName(r.acc))+'</div></div><div class="amt '+(r.type==='inc'?'in':'out')+'">'+N(fmt(r.amt))+'</div></div><button class="pay" data-act="recurDel" data-id="'+esc(r.id)+'" aria-label="شيل '+esc(recurLbl(r))+'">شيل</button></div>').join('')+'</div>';
+}
+function moreExtras(){
+  const th=getTheme();
+  let h='<div class="sec"><h2>المظهر</h2></div><div class="chips">'+[['auto','تلقائي (زي التليفون)'],['light','فاتح'],['dark','داكن']].map(k=>'<button class="chip sm'+(th===k[0]?' on':'')+'" data-act="theme" data-m="'+k[0]+'">'+k[1]+'</button>').join('')+'</div>';
+  h+='<div class="sec"><h2>حركات متكررة</h2></div>'+recurList()+'<div class="btns">'+btn('recurNew','+ حركة متكررة')+'</div>';
+  h+='<div class="sec"><h2>قفل التطبيق</h2></div><div class="card"><p style="margin:0 0 8px;color:var(--muted);font-size:14px">'+(pinOn()?'القفل شغّال: التطبيق بيطلب الرقم السري لما تفتحه أو ترجع له بعد دقيقة. الرقم محفوظ على الجهاز ده بس.':'رقم سري من ٤ أرقام بيتطلب لما تفتح التطبيق. الرقم محفوظ على الجهاز ده بس، وده قفل راحة مش حماية كاملة.')+'</p><div class="btns">'+(pinOn()?btn('lockNow','اقفل دلوقتي','primary')+btn('pinChange','غيّر الرقم')+btn('pinOff','شيل القفل'):btn('pinSetup','فعّل القفل برقم سري','primary'))+'</div></div>';
+  return h;
+}
+let RC=null,PS=null,LK=null,hiddenAt=0;
+function recurSheet(){
+  const accs=liveAccs();
+  openSheet('<h3>حركة متكررة</h3><div style="font-size:14px;color:var(--muted)">هتظهر لك في الرئيسية يوم الاستحقاق وتسجّلها بضغطة. مش بتتسجّل لوحدها.</div>'
+    +'<div class="field"><span class="lbl2">النوع</span><div class="chips">'+[['exp','مصروف'],['inc','دخل']].map(k=>'<button class="chip sm'+(RC.type===k[0]?' on':'')+'" data-act="rcType" data-k="'+k[0]+'">'+k[1]+'</button>').join('')+'</div></div>'
+    +'<div class="field"><label for="rcNote">الوصف</label><input type="text" id="rcNote" value="'+esc(RC.note)+'" data-in="rcNote" placeholder="مثلًا: إيجار الدكان" autocomplete="off"></div>'
+    +'<div class="field"><label for="rcAmt">المبلغ</label><input type="text" inputmode="decimal" id="rcAmt" value="'+esc(RC.amt)+'" data-in="rcAmt" placeholder="0"></div>'
+    +'<div class="field"><span class="lbl2">الحساب</span><div class="chips">'+accs.map(a=>'<button class="chip sm'+(RC.acc===a.id?' on':'')+'" data-act="rcAcc" data-id="'+esc(a.id)+'">'+esc(a.name)+'</button>').join('')+'</div></div>'
+    +'<div class="field"><label for="rcCat">الفئة</label><select id="rcCat" data-in="rcCat"><option value="">بدون فئة</option>'+CATS.map(c=>'<option value="'+esc(c)+'"'+(RC.cat===c?' selected':'')+'>'+esc(c)+'</option>').join('')+'</select></div>'
+    +'<div class="field"><label for="rcDay">يوم الشهر (من ١ لـ ٣١)</label><input type="text" inputmode="numeric" id="rcDay" value="'+esc(RC.day)+'" data-in="rcDay"></div>'
+    +'<div class="btns">'+btn('rcSave','حفظ','primary')+'</div>');
+}
+function pinSheet(){
+  const need=PS.mode!=='setup',newp=PS.mode!=='off';
+  openSheet('<h3>'+(PS.mode==='setup'?'فعّل القفل':(PS.mode==='change'?'غيّر الرقم السري':'شيل القفل'))+'</h3>'
+    +(need?'<div class="field"><label for="pinCur">الرقم الحالي</label><input type="password" inputmode="numeric" maxlength="4" id="pinCur" data-in="pinCur" autocomplete="off"></div>':'')
+    +(newp?'<div class="field"><label for="pin1">رقم سري جديد (٤ أرقام)</label><input type="password" inputmode="numeric" maxlength="4" id="pin1" data-in="pin1" autocomplete="off"></div><div class="field"><label for="pin2">اكتبه تاني</label><input type="password" inputmode="numeric" maxlength="4" id="pin2" data-in="pin2" autocomplete="off"></div>':'')
+    +'<div class="btns">'+btn('pinSave',PS.mode==='off'?'شيل القفل':'حفظ','primary')+'</div>');
+}
+function lockDots(){const d=$('#lockDots');if(d)d.innerHTML=[0,1,2,3].map(i=>'<i class="'+(i<LK.buf.length?'on':'')+'"></i>').join('')}
+function showLock(){
+  if($('#lock')||!pinOn())return;
+  LK={buf:''};
+  const d=document.createElement('div');d.id='lock';d.className='lock';d.setAttribute('role','dialog');d.setAttribute('aria-label','قفل التطبيق');
+  d.innerHTML='<div class="lt">دفتر حساباتي</div><div class="ls" id="lockMsg">اكتب الرقم السري</div><div class="ldots" id="lockDots"></div>'
+    +'<div class="kpad">'+['1','2','3','4','5','6','7','8','9','','0','del'].map(k=>k===''?'<span></span>':'<button data-act="lockKey" data-k="'+k+'" aria-label="'+(k==='del'?'مسح':k)+'">'+(k==='del'?'⌫':k)+'</button>').join('')+'</div>'
+    +'<button class="link" data-act="lockForgot">نسيت الرقم؟</button>';
+  d.addEventListener('click',ev=>{const el=ev.target.closest('[data-act]');if(el&&ACT[el.dataset.act])ACT[el.dataset.act](el,ev)});
+  document.body.appendChild(d);lockDots();
+}
+Object.assign(ACT,{
+  theme(el){const m=el.dataset.m;try{localStorage.setItem(THEME_KEY,m)}catch(e){}applyTheme(m);render()},
+  recurNew(){
+    const a=liveAccs()[0];
+    RC={type:'exp',note:'',amt:'',acc:a?a.id:'',cat:'',day:String(Math.min(28,new Date().getDate()))};
+    recurSheet();
+  },
+  rcType(el){RC.type=el.dataset.k;recurSheet()},
+  rcAcc(el){RC.acc=el.dataset.id;recurSheet()},
+  rcSave(){
+    const amt=parseFloat(normDigits(RC.amt).replace(/,/g,'')),day=parseInt(normDigits(RC.day),10);
+    if(!(amt>0)){toast('اكتب المبلغ');return}
+    if(!RC.acc){toast('اختار الحساب');return}
+    if(!(day>=1&&day<=31)){toast('اليوم لازم يكون من ١ لـ ٣١');return}
+    const r={id:gid(),type:RC.type,amt:Math.round(amt*100)/100,acc:RC.acc,cat:RC.cat||null,note:RC.note.trim()||null,day:day,last:''};
+    if(new Date().getDate()>=day)r.last=curKey();
+    (S.meta.recur||(S.meta.recur=[])).push(r);
+    closeSheet();touch({meta:true});
+    toast('اتضافت: '+recurLbl(r)+(r.last?' (هتبدأ من الشهر الجاي)':''),()=>{S.meta.recur=S.meta.recur.filter(y=>y.id!==r.id);touch({meta:true})});
+  },
+  recurDo(el){
+    const r=(S.meta.recur||[]).find(y=>y.id===el.dataset.id);if(!r)return;
+    const old=r.last,x={id:gid(),t:Date.now(),type:r.type,amt:r.amt,from:r.type==='exp'?r.acc:null,to:r.type==='inc'?r.acc:null,person:null,cat:r.cat||null,once:false,note:r.note||null};
+    S.tx.push(x);r.last=curKey();touch({meta:true});
+    toast('اتسجّلت: '+recurLbl(r)+' '+fmt(r.amt)+' ج.م',()=>{S.tx=S.tx.filter(y=>y.id!==x.id);r.last=old;touch({meta:true})});
+  },
+  recurSkip(el){
+    const r=(S.meta.recur||[]).find(y=>y.id===el.dataset.id);if(!r)return;
+    const old=r.last;r.last=curKey();touch({meta:true});
+    toast('اتخطّينا '+recurLbl(r)+' الشهر ده',()=>{r.last=old;touch({meta:true})});
+  },
+  recurDel(el){
+    const L=S.meta.recur||[],i=L.findIndex(y=>y.id===el.dataset.id);if(i<0)return;
+    const r=L[i];L.splice(i,1);touch({meta:true});
+    toast('اتشالت: '+recurLbl(r),()=>{S.meta.recur.splice(Math.min(i,S.meta.recur.length),0,r);touch({meta:true})});
+  },
+  pinSetup(){PS={mode:'setup',cur:'',p1:'',p2:''};pinSheet()},
+  pinChange(){PS={mode:'change',cur:'',p1:'',p2:''};pinSheet()},
+  pinOff(){PS={mode:'off',cur:'',p1:'',p2:''};pinSheet()},
+  async pinSave(){
+    if(!(window.crypto&&crypto.subtle)){toast('المتصفح ده مش بيدعم القفل');return}
+    const cur=normDigits(PS.cur),p1=normDigits(PS.p1),p2=normDigits(PS.p2);
+    if(PS.mode!=='setup'){
+      const h=await pinHash(cur);let st='';try{st=localStorage.getItem(PIN_KEY)||''}catch(e){}
+      if(h!==st){toast('الرقم الحالي غلط');return}
+    }
+    if(PS.mode==='off'){try{localStorage.removeItem(PIN_KEY)}catch(e){}closeSheet();render();toast('اتشال القفل');return}
+    if(!/^\d{4}$/.test(p1)){toast('الرقم لازم يكون ٤ أرقام');return}
+    if(p1!==p2){toast('الرقمين مش زي بعض');return}
+    try{localStorage.setItem(PIN_KEY,await pinHash(p1))}catch(e){toast('مقدرتش أحفظ الرقم على الجهاز');return}
+    closeSheet();render();toast('القفل اشتغل');
+  },
+  lockNow(){showLock()},
+  lockKey(el){
+    if(!LK)return;const k=el.dataset.k;
+    if(k==='del')LK.buf=LK.buf.slice(0,-1);else if(LK.buf.length<4)LK.buf+=k;
+    lockDots();
+    if(LK.buf.length===4){
+      const b=LK.buf;
+      pinHash(b).then(h=>{
+        let st='';try{st=localStorage.getItem(PIN_KEY)||''}catch(e){}
+        if(h===st){const d=$('#lock');if(d)d.remove();LK=null}
+        else{LK.buf='';lockDots();const m=$('#lockMsg');if(m)m.textContent='الرقم غلط، جرّب تاني'}
+      });
+    }
+  },
+  lockForgot(el){
+    if(!el.dataset.armed){el.dataset.armed='1';el.textContent='هنسجّل خروج وتدخل تاني بحسابك. اضغط للتأكيد';return}
+    try{localStorage.removeItem(PIN_KEY)}catch(e){}
+    const d=$('#lock');if(d)d.remove();LK=null;ACT.signOut();
+  }
+});
+Object.assign(INP,{
+  rcNote(el){RC.note=el.value},rcAmt(el){RC.amt=el.value},rcCat(el){RC.cat=el.value},rcDay(el){RC.day=el.value},
+  pinCur(el){PS.cur=el.value},pin1(el){PS.p1=el.value},pin2(el){PS.p2=el.value}
+});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)hiddenAt=Date.now();
+  else if(pinOn()&&hiddenAt&&Date.now()-hiddenAt>60000)showLock();
+});
+if(pinOn()){if(document.body)showLock();else document.addEventListener('DOMContentLoaded',showLock)}
 
 /* ---------- تشغيل ---------- */
 const app=$('#app');
@@ -2167,7 +2318,7 @@ const TILES='<div class="tiles">'
 /* الرئيسية = الأصلية مع استبدال صف الإجراءات بالمربعات + تذكير النسخة الاحتياطية */
 function vHome(){
   const h=vHomeBase();
-  return backupNudge()+budgetAlert()+dueAlert()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
+  return backupNudge()+budgetAlert()+dueAlert()+recurAlert()+h.replace(/<div class="qa">[\s\S]*?<\/div>/,TILES);
 };
 const _txRow2=txRow;
 txRow=function(x){
