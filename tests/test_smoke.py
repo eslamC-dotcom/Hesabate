@@ -34,9 +34,16 @@ def scenario(pg):
     pg.click('[data-act="quick"][data-type="exp"]'); pg.wait_for_timeout(300); chk(pg, 'newTx'); pg.keyboard.press('Escape')
     # شخص + كشف حساب + رسالة واتساب
     pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)
-    pg.click('#view .row >> nth=0'); pg.wait_for_timeout(300); chk(pg, 'person')
+    pg.click('#view .row:has-text("أحمد")'); pg.wait_for_timeout(300); chk(pg, 'person')
     pg.click('[data-act="waOpen"]'); pg.wait_for_timeout(300); chk(pg, 'wa')
     if 'تفاصيل حسابنا' not in pg.input_value('#waMsg') or 'الباقي عليك: 300' not in pg.input_value('#waMsg'): BAD.append('wa: كشف الحساب غلط أو فاضي')
+    if '➕' in pg.input_value('#waMsg'): BAD.append('wa: لسه فيه ➕')
+    pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+    # كشف حساب حد اتحوّله من فودافون كاش
+    pg.click('#view .row:has-text("منى")'); pg.wait_for_timeout(300)
+    pg.click('[data-act="waOpen"]'); pg.wait_for_timeout(300)
+    m = pg.input_value('#waMsg')
+    if 'تحويل فودافون كاش' not in m or 'سلف' in m: BAD.append('wa: سلف من فودافون كاش لازم تتكتب تحويل فودافون كاش')
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
     # حساب
     pg.click('.nav .tab[data-tab="more"]'); pg.wait_for_timeout(200)
@@ -51,6 +58,6 @@ def scenario(pg):
     pg.click('.nav .tab[data-tab="log"]'); pg.wait_for_timeout(200); chk(pg, 'log after sms')
 
 if __name__ == '__main__':
-    run(scenario, tx=TX, init=INIT)
+    run(scenario, tx=TX + [{'id':'t8','t':FIXED-86400000,'type':'lend','amt':250,'from':'a_voda','person':'منى'}], init=INIT)
     print('\n'.join(BAD) if BAD else 'OK: مفيش مشاكل ظاهرة')
     sys.exit(1 if BAD else 0)

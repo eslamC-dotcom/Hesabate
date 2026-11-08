@@ -2055,6 +2055,18 @@ addSmsItems=function(auto){
 };
 
 /* ---------- رسالة تفاصيل الحساب (واتساب) ---------- */
+/* اسم الحركة في كشف الحساب: لو الفلوس اتحوّلت من/لمحفظة (فودافون كاش) أو بنك نكتب ده بدل "سلف" */
+function stmtLbl(x,def){
+  const a=accById(x.from||x.to);
+  if(!a)return def;
+  const out=x.type==='lend'||x.type==='borrow',rep=x.type==='repay_in'||x.type==='repay_out';
+  if(!out&&!rep)return def;
+  let via='';
+  if(a.kind==='wallet'||/فودافون/.test(a.name))via=a.name;
+  else if(a.kind==='bank')via='بنكي';
+  if(!via)return def;
+  return (out?'تحويل ':'سداد ')+via;
+}
 function stmtMsg(name,head,extra){
   const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
   const W={lend:'سلف',repay_in:'سداد',borrow:'استلاف',repay_out:'سداد ليك'};
@@ -2069,8 +2081,8 @@ function stmtMsg(name,head,extra){
   L.push('📋 *تفاصيل حسابنا*',LN);
   if(older.length&&Math.abs(prior)>0.004)L.push('▫️ قبل كده: '+(prior>0?'عليك ':'ليك عندي ')+fmt(Math.abs(prior))+' ج');
   rows.forEach(x=>{
-    const o=x.op&&opBy(x.op),lbl=o?o.l:W[x.type];
-    L.push((sg(x)>0?'➕ ':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
+    const o=x.op&&opBy(x.op),lbl=o?o.l:stmtLbl(x,W[x.type]);
+    L.push((sg(x)>0?'':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
   });
   if(!rows.length)L.push('لسه مفيش حركات');
   L.push(LN);
