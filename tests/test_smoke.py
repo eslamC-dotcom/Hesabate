@@ -47,6 +47,10 @@ def scenario(pg):
     m = pg.input_value('#waMsg')
     if 'تحويل فودافون كاش' not in m or 'سلف' in m: BAD.append('wa: سلف من فودافون كاش لازم تتكتب تحويل فودافون كاش')
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
+    # كشف حد دفع عني فاتورة: الإجمالي هو الفاتورة والسداد هو اللي سدّدته
+    m = pg.evaluate("window.__hs.stmtMsg('زيد','تم حساب فاتورة',[{type:'repay_out',amt:40000,t:Date.now(),person:'زيد'},{type:'borrow',amt:60250,t:Date.now()+1,person:'زيد'}])")
+    if 'الإجمالي: 60,250' not in m or 'السداد: 40,000' not in m or 'ليك عندي: 20,250' not in m or 'استلف' in m: BAD.append('wa: الإجمالي والسداد متبدلين أو كلمة استلفت: '+m)
+    if '➖ ' in m.split('\n')[-1]: BAD.append('wa: علامة ➖ في الآخر')
     # زر السداد السريع + ميعاد السداد
     pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)
     pg.click('.prow .pay >> nth=0'); pg.wait_for_timeout(300); chk(pg, 'quick pay')
@@ -100,6 +104,6 @@ def scenario(pg):
     pg.click('.nav .tab[data-tab="log"]'); pg.wait_for_timeout(200); chk(pg, 'log after sms')
 
 if __name__ == '__main__':
-    run(scenario, tx=TX + [{'id':'t8','t':FIXED-86400000,'type':'lend','amt':250,'from':'a_voda','person':'منى'}], init=INIT)
+    run(scenario, tx=TX + [{'id':'t8','t':FIXED-86400000,'type':'lend','amt':250,'from':'a_voda','person':'منى'}], path='index.html?__test=1', init=INIT)
     print('\n'.join(BAD) if BAD else 'OK: مفيش مشاكل ظاهرة')
     sys.exit(1 if BAD else 0)

@@ -955,7 +955,7 @@ Object.assign(ACT,{
 });
 
 /* خُطّاف للاختبارات التلقائية فقط (بيشتغل لما الرابط فيه ?__test) */
-if(/[?&]__test\b/.test(location.search))window.__hs={parseMsg:(...a)=>parseMsg(...a),splitMsgs:(...a)=>splitMsgs(...a),guessAcc:(...a)=>guessAcc(...a)};
+if(/[?&]__test\b/.test(location.search))window.__hs={parseMsg:(...a)=>parseMsg(...a),splitMsgs:(...a)=>splitMsgs(...a),guessAcc:(...a)=>guessAcc(...a),stmtMsg:(...a)=>stmtMsg(...a)};
 
 /* ---------- التقارير والميزانية وتصدير CSV ---------- */
 const isBiz=a=>!!a&&(a.kind==='shop'||a.kind==='work');
@@ -1542,7 +1542,7 @@ const OPS=[
   {g:'سدّد لي',k:'in_cash',t:'repay_in',l:'سدّد لي كاش',def:'cash',tm:'تم استلام سداد {المبلغ} جنيه.'},
   {g:'سدّد لي',k:'in_vcash',t:'repay_in',l:'سدّد لي فودافون كاش',def:'wallet',tm:'تم استلام سداد {المبلغ} جنيه على فودافون كاش.'},
   {g:'سدّد لي',k:'in_bank',t:'repay_in',l:'سدّد لي على البنك',def:'bank',tm:'تم استلام سداد {المبلغ} جنيه على البنك.'},
-  {g:'استلفت منه وسدّدت له',k:'borrow',t:'borrow',l:'استلفت منه',def:'cash',tm:'تم استلاف {المبلغ} جنيه منك.'},
+  {g:'استلفت منه وسدّدت له',k:'borrow',t:'borrow',l:'حساب فاتورة',def:'cash',tm:'تم حساب فاتورة بمبلغ {المبلغ} جنيه.'},
   {g:'استلفت منه وسدّدت له',k:'out_cash',t:'repay_out',l:'سدّدت له كاش',def:'cash',tm:'تم سداد {المبلغ} جنيه ليك.'},
   {g:'استلفت منه وسدّدت له',k:'out_vcash',t:'repay_out',l:'سدّدت له فودافون كاش',def:'wallet',tm:'تم تحويل {المبلغ} جنيه فودافون كاش سداد ليك.'}
 ];
@@ -2274,26 +2274,29 @@ function stmtLbl(x,def){
 }
 function stmtMsg(name,head,extra){
   const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
-  const W={lend:'سلف',repay_in:'سداد',borrow:'استلاف',repay_out:'سداد ليك'};
+  const W={lend:'سلف',repay_in:'سداد',borrow:'حساب فاتورة',repay_out:'سداد ليك'};
   const sg=x=>TYPES[x.type].debt,MAX=10;
   const rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
   let prior=0;older.forEach(x=>prior+=sg(x)*x.amt);prior=Math.round(prior*100)/100;
   let up=0,dn=0;all.forEach(x=>{if(sg(x)>0)up+=x.amt;else dn+=x.amt});
   up=Math.round(up*100)/100;dn=Math.round(dn*100)/100;
   const net=Math.round((up-dn)*100)/100,LN='━━━━━━━━━━━━';
+  /* الجانب الأساسي (اللي بيتحسب "الإجمالي"): اللي عليه الرصيد؛ لو خالص ناخد أول حركة. الباقي = سداد */
+  const pos=net>0.004?1:net<-0.004?-1:(all.length?sg(all[0]):1);
+  const tot=pos>0?up:dn,paid=pos>0?dn:up;
   const L=[];
   if(head&&head.trim())L.push('🆕 '+head.trim(),'');
   L.push('📋 *تفاصيل حسابنا*',LN);
   if(older.length&&Math.abs(prior)>0.004)L.push('▫️ قبل كده: '+(prior>0?'عليك ':'ليك عندي ')+fmt(Math.abs(prior))+' ج');
   rows.forEach(x=>{
     const o=x.op&&opBy(x.op),lbl=o?o.l:stmtLbl(x,W[x.type]);
-    L.push((sg(x)>0?'':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
+    L.push((sg(x)===pos?'':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
   });
   if(!rows.length)L.push('لسه مفيش حركات');
   L.push(LN);
-  if(dn>0.004){
-    L.push('الإجمالي: '+fmt(up)+' ج');
-    L.push('السداد: '+fmt(dn)+' ج');
+  if(paid>0.004){
+    L.push('الإجمالي: '+fmt(tot)+' ج');
+    L.push('السداد: '+fmt(paid)+' ج');
     if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
     else if(net>0)L.push('💰 *الباقي عليك: '+fmt(net)+' ج*');
     else L.push('💰 *الباقي ليك عندي: '+fmt(-net)+' ج*');
@@ -2363,7 +2366,7 @@ ACT.smsLink=function(el){
 
 /* ---------- كشف حساب الشخص + إرسال من أي حركة ---------- */
 function stmtTable(name){
-  const W={lend:'سلف',repay_in:'سداد منه',borrow:'استلاف منه',repay_out:'سداد ليه'};
+  const W={lend:'سلف',repay_in:'سداد منه',borrow:'حساب فاتورة',repay_out:'سداد ليه'};
   const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).sort((a,b)=>a.t-b.t);
   let run=0;const rows=all.map(x=>{const d=TYPES[x.type].debt;run=Math.round((run+d*x.amt)*100)/100;return {x:x,d:d,run:run}});
   return '<div class="list">'+rows.reverse().map(r=>{
