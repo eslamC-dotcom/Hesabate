@@ -820,7 +820,7 @@ function addSmsItems(auto){
     if(it.op)x.op=it.op;
     if(it.num&&x.person)(S.meta.numOp=S.meta.numOp||{})[(it.dir||'out')+'|'+it.num]={type:x.type,op:x.op||'',person:x.person};
     learnPair(it.dir||(T.to&&!T.from?'in':'out'),it.sacc||it.acc,x);
-    if(it.fee>0&&x.from)S.tx.push({id:gid(),t:x.t,type:'exp',amt:it.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
+    if(it.fee>0&&x.from){const onP=x.type==='lend'&&x.person;S.tx.push({id:gid(),t:x.t,type:onP?'lend':'exp',amt:it.fee,from:x.from,to:null,person:onP?x.person:null,cat:onP?null:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'})}
     S.meta.seen=(S.meta.seen||[]).concat(it.h).slice(-2000);
     if(it.bal!=null){const sb=S.meta.smsBal=S.meta.smsBal||{};if(!sb[it.acc]||sb[it.acc].t<=it.t)sb[it.acc]={v:it.bal,t:it.t}}
     if(it.bal!=null&&(!lastBal[it.acc]||lastBal[it.acc].t<=it.t))lastBal[it.acc]={t:it.t,v:it.bal};
@@ -1293,7 +1293,7 @@ function vcOpen(){
     +'<div id="vContacts"></div>'
     +'<div class="field"><label for="vAmt">المبلغ بالجنيه</label><input type="text" id="vAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vAmt"></div>'
     +'<div id="vNote"></div>'
-    +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div>'
+    +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div><div style="font-size:13px;color:var(--muted);margin:-6px 0 8px">لو سلفة لشخص، الرسوم بتتضاف على حسابه لوحدها.</div>'
     +'<div id="vErr"></div>'
     +'<div class="btns">'+btn('vGen','جهّز الكود','primary')+'</div>');
   vcDyn();
@@ -1324,6 +1324,7 @@ function vcGen(){
     +'<div class="card" style="margin-block:8px"><div class="kv"><span>'+(VT.purpose==='lend'?'سلفة على':(VT.purpose==='repay_out'?'سداد لـ':'الاسم'))+'</span><b>'+esc(pn||'من غير اسم')+'</b></div>'
     +'<div class="kv"><span>بتحوّل للرقم</span><b class="num">'+esc(num)+'</b></div>'
     +'<div class="kv"><span>المبلغ</span><b>'+N(fmt(amt))+' ج.م</b></div>'
+    +(parseNum(VT.fee)>0?'<div class="kv"><span>رسوم التحويل'+(VT.purpose==='lend'?' (على حساب الشخص)':'')+'</span><b>'+N(fmt(parseNum(VT.fee)))+' ج.م</b></div>':'')
     +'<div class="kv"><span>هيتخصم من</span><b>'+esc(accName(VT.from))+'</b></div></div>'
     +'<div class="lbl2">الكود</div><div class="card" dir="ltr" style="margin-top:6px;text-align:center;font-size:20px;font-weight:700;unicode-bidi:isolate" id="vCode"><bdi dir="ltr">'+esc(code)+'</bdi></div>'
     +'<div class="btns"><a class="btn primary" style="text-align:center;text-decoration:none" href="tel:'+esc(code.replace(/#/g,'%23'))+'">افتح الاتصال بالكود</a>'+btn('vCopy','نسخ الكود')+'</div>'
@@ -1336,15 +1337,17 @@ function vcDone(){
   if(VT.purpose==='exp'){base.type='exp';base.cat='تحويل فودافون كاش'}
   else{base.type=VT.purpose;base.person=pn}
   txs.push(base);
-  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:base.id});
+  if(fee>0){const onP=VT.purpose==='lend'&&pn;txs.push({id:gid(),t:now,type:onP?'lend':'exp',amt:Math.round(fee*100)/100,from:VT.from,to:null,person:onP?pn:null,cat:onP?null:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:base.id})}
   S.tx=S.tx.concat(txs);
-  if(pn){const c=contacts();const i=c.findIndex(x=>x.n===pn);if(i>=0){if(!c[i].p)c[i].p=num}else c.push({n:pn,p:num})}
+  const had=pn?contactFor(pn):null;
+  if(pn&&!had){contacts().push({n:pn,p:num})}
   (S.meta.last=S.meta.last||{}).vcFrom=VT.from;
   const ids=txs.map(x=>x.id);
   const purpose=VT.purpose;
   touch({meta:true});
   toast('اتسجّل تحويل '+fmt(amt)+' ج.م'+(pn?' إلى '+pn:''),()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
-  if(purpose!=='exp'&&pn)waSheet(pn,num,'اتسجّل التحويل وحسابه اتحدّث. تبعت له رسالة بالتفاصيل؟');else closeSheet();
+  /* الرسالة تروح لرقم الشخص اللي اخترته، مش لرقم التحويل (ممكن يكون رقم حد تاني) */
+  if(purpose!=='exp'&&pn)waSheet(pn,(had&&had.p)||(had?'':num),'اتسجّل التحويل وحسابه اتحدّث.'+(had&&!had.p?' اكتب رقم واتساب '+pn+' (الرقم اللي حوّلت له ممكن يكون رقم حد تاني).':' تبعت له رسالة بالتفاصيل؟'));else closeSheet();
 }
 Object.assign(ACT,{
   vcOpen(){vcOpen()},
@@ -1387,7 +1390,7 @@ Object.assign(INP,{
   vNum(el){VT.num=el.value;VT.numAuto=false;const b=$('#vContacts');if(b&&contacts().length)vcDyn()},
   vName(el){VT.name=el.value;vcNote();const pp=$('#vPpl');if(pp)vcDyn()},
   vAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.amt=v;vcNote()},
-  vFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.fee=v}
+  vFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.fee=v;vcNote()}
 });
 
 /* ---------- مطابقة الرصيد مع الرسائل ---------- */
@@ -1421,9 +1424,9 @@ function peopleAll(){
 const balTxt=b=>b>0.004?'عليه لك '+fmt(b)+' ج.م':(b<-0.004?'عليك له '+fmt(-b)+' ج.م':'متصفّي');
 function vcNote(){
   const b=$('#vNote');if(!b||!VT)return;
-  const nm=VT.name.trim(),p=nm&&people().find(q=>q.name===nm),amt=parseNum(VT.amt);
+  const nm=VT.name.trim(),p=nm&&people().find(q=>q.name===nm),amt=parseNum(VT.amt),fee=VT.purpose==='lend'?(parseNum(VT.fee)||0):0;
   if(!p||VT.purpose==='exp'){b.innerHTML='';return}
-  const after=isNaN(amt)?p.bal:Math.round((p.bal+(VT.purpose==='lend'?amt:-amt))*100)/100;
+  const after=isNaN(amt)?p.bal:Math.round((p.bal+(VT.purpose==='lend'?amt+fee:-amt))*100)/100;
   b.innerHTML='<div class="warn" style="margin-top:6px">قبل التحويل: '+esc(balTxt(p.bal))+(isNaN(amt)?'':'، وبعده: '+esc(balTxt(after)))+'</div>';
 }
 const dm=t=>{const d=new Date(t);return d.getDate()+'/'+(d.getMonth()+1)};
@@ -1868,7 +1871,8 @@ function knownName(p){
 function ensureFee(x,p,acc){
   if(!(p.fee>0)||!x.from)return;
   if(S.tx.some(y=>y.feeOf===x.id))return;
-  S.tx.push({id:gid(),t:p.hasDate||p.t?p.t:x.t,type:'exp',amt:p.fee,from:x.from,to:null,person:null,cat:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
+  const onP=x.type==='lend'&&x.person;
+  S.tx.push({id:gid(),t:p.hasDate||p.t?p.t:x.t,type:onP?'lend':'exp',amt:p.fee,from:x.from,to:null,person:onP?x.person:null,cat:onP?null:'رسوم',once:false,note:'رسوم تحويل فودافون كاش',feeOf:x.id,src:'sms'});
 }
 findMatch=function(p,acc){
   let best=null,bs=null,bscore=1e18;
@@ -2273,7 +2277,11 @@ function stmtLbl(x,def){
   return (out?'تحويل ':'سداد ')+via;
 }
 function stmtMsg(name,head,extra){
-  const all=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
+  const all0=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
+  /* رسوم التحويل بتتدمج في سطر التحويل نفسه (المجموع زي ما هو) */
+  const all=all0.filter(x=>!(x.feeOf&&all0.some(y=>y.id===x.feeOf))).map(x=>{
+    const f=all0.filter(y=>y.feeOf&&y.feeOf===x.id).reduce((n,y)=>n+y.amt,0);
+    return f?Object.assign({},x,{amt:Math.round((x.amt+f)*100)/100}):x});
   const W={lend:'سلف',repay_in:'سداد',borrow:'حساب فاتورة',repay_out:'سداد ليك'};
   const sg=x=>TYPES[x.type].debt,MAX=10;
   const rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
