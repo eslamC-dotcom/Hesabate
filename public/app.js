@@ -392,6 +392,7 @@ function vMore(){
   h+=cs.length?'<div class="list">'+cs.map((c,i)=>'<div class="row"><div class="mid"><div class="t1">'+esc(c.n)+'</div><div class="t2 num">'+esc(c.p)+'</div></div><button class="link" data-act="delContact" data-i="'+i+'">مسح</button></div>').join('')+'</div>':'<div class="empty" style="padding:10px">الأرقام اللي تحوّل لها بتتحفظ هنا.</div>';
   h+='<div class="sec"><h2>نسخة احتياطية</h2></div><div class="card"><p style="margin:0 0 6px;color:var(--muted);font-size:14px">حمّل نسخة من بياناتك كملف، أو استرجع نسخة قديمة. قبل أي استرجاع بنحفظ نسخة أمان تلقائي.</p><div class="kv"><span>آخر نسخة حمّلتها</span><b>'+(S.meta.lastBackup?esc(new Date(S.meta.lastBackup).toLocaleDateString('ar-EG',{day:'numeric',month:'long'})):'لسه')+'</b></div><div class="btns" style="margin-top:8px">'+btn('exportData','حفظ نسخة','primary')+btn('importOpen','استرجاع نسخة')+'</div></div>';
   h+=safetyCard()+trashCard();
+  h+='<div class="sec"><h2>الأمانات</h2></div><div class="btns">'+btn('tab','ذهب وفضة وعملات (أمانات الناس)','','data-tab="vault"')+'</div>';
   h+='<div class="sec"><h2>عن الدفتر</h2></div><div class="card" style="font-size:14px;color:var(--muted)">'
     +'لو حساب سلّف حساب تاني (جيبي سلّف الدكان مثلًا) سجّلها "سلفة لحساب" وهتظهر في الرئيسية تحت "ديون بين حساباتك". ولو حد سابلك فلوس أمانة سجّلها "استلفت" باسمه، وهتتخصم من "الصافي" لأنها مش بتاعتك. الرصيد بيتحسب من الحركات اللي بتسجّلها. لو نسيت تسجّل حاجة، افتح الحساب واكتب الرصيد الفعلي والدفتر هيسجّل الفرق لوحده كحركة "غير مسجّل" وتعرف حجم اللخبطة.</div>';
   return h;
@@ -403,7 +404,7 @@ function render(){
   $('#today').textContent=new Date().toLocaleDateString('ar-EG',{weekday:'long',day:'numeric',month:'long'});
   document.querySelectorAll('.nav .tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
   const bd=$('#smsBdg');if(bd){const n=(ui.sms&&ui.sms.auto&&ui.sms.auto.items.length)||0;bd.hidden=!n;bd.textContent=n}
-  const views={home:vHome,log:vLog,people:vPeople,sms:vSms,more:vMore,rep:vRep};
+  const views={home:vHome,log:vLog,people:vPeople,sms:vSms,more:vMore,rep:vRep,vault:vVault};
   const y=window.scrollY;
   $('#view').innerHTML=views[ui.tab]();
   window.scrollTo(0,y);
@@ -1259,6 +1260,119 @@ document.addEventListener('visibilitychange',()=>{
   else if(pinOn()&&hiddenAt&&Date.now()-hiddenAt>60000)showLock();
 });
 if(pinOn()){if(document.body)showLock();else document.addEventListener('DOMContentLoaded',showLock)}
+
+/* ---------- الأمانات: ذهب وفضة وعملات (قسم مستقل، مش داخل في أي رصيد) ---------- */
+const VK=[['g24','ذهب عيار 24','جرام'],['g21','ذهب عيار 21','جرام'],['g18','ذهب عيار 18','جرام'],['sil','فضة','جرام'],['sar','ريال سعودي','ريال']];
+const vkL=k=>(VK.find(x=>x[0]===k)||['','؟',''])[1],vkU=k=>(VK.find(x=>x[0]===k)||['','','وحدة'])[2];
+function vault(){const v=S.meta.vault=S.meta.vault||{};v.items=v.items||[];v.prices=v.prices||{};return v}
+const vNow=it=>{const p=+vault().prices[it.k];return p>0?Math.round(it.q*p*100)/100:null};
+let VS=null,VP=null;
+function vVault(){
+  const V=vault(),own=ui.vOwn||'all',all=V.items;
+  const owners=[];all.forEach(i=>{const o=i.own||'';if(owners.indexOf(o)<0)owners.push(o)});
+  const items=all.filter(i=>own==='all'||(i.own||'')===own);
+  let h='<div class="sec"><h2>الأمانات</h2><button class="link" data-act="tab" data-tab="more">رجوع</button></div>';
+  h+='<div style="font-size:13px;color:var(--muted);margin:-4px 0 8px">قسم خاص: مش بيدخل في الأرصدة ولا الرئيسية ولا التقارير.</div>';
+  const pr=V.prices,pt=V.pt;
+  h+='<div class="card"><div class="kv"><span>أسعار النهارده</span><b style="font-size:13px">'+(pt?esc(new Date(pt).toLocaleDateString('ar-EG',{day:'numeric',month:'long'})):'لسه متحدّدتش')+'</b></div>'
+    +VK.map(k=>'<div class="kv"><span>'+k[1]+' (لل'+k[2]+')</span><b>'+(+pr[k[0]]>0?N(fmt(pr[k[0]]))+' ج':'—')+'</b></div>').join('')
+    +'<div class="btns">'+btn('vtPrices','حدّث السعر النهارده','primary')+'</div></div>';
+  if(owners.length>1)h+='<div class="scroll-x" style="margin:10px 0 4px"><button class="chip sm'+(own==='all'?' on':'')+'" data-act="vtFilter" data-o="all">الكل</button>'
+    +owners.map(o=>'<button class="chip sm'+(own===o?' on':'')+'" data-act="vtFilter" data-o="'+esc(encodeURIComponent(o))+'">'+esc(o||'ملكي')+'</button>').join('')+'</div>';
+  if(!items.length)h+='<div class="empty" style="margin:16px 0;color:var(--muted)">مفيش حاجة متسجّلة لسه. اضغط "إضافة".</div>';
+  if(items.length){
+    const by={};items.forEach(i=>by[i.k]=(by[i.k]||0)+i.q);
+    let tv=0,tc=0,miss=false;items.forEach(i=>{const v=vNow(i);if(v==null)miss=true;else tv+=v;tc+=i.cost>0?i.cost:0});
+    h+='<div class="card" style="margin-top:10px">'+VK.filter(k=>by[k[0]]).map(k=>'<div class="kv"><span>'+k[1]+'</span><b>'+N(fmt(by[k[0]]))+' '+k[2]+'</b></div>').join('')
+      +'<div class="kv"><span>القيمة بسعر النهارده</span><b>'+N(fmt(tv))+' ج'+(miss?' (من غير اللي سعره مش متحدّد)':'')+'</b></div>'
+      +(tc>0?'<div class="kv"><span>إجمالي سعر الشراء</span><b>'+N(fmt(tc))+' ج</b></div>':'')+'</div>';
+  }
+  const groups={};items.forEach(i=>{(groups[i.own||'']=groups[i.own||'']||[]).push(i)});
+  Object.keys(groups).forEach(o=>{
+    const g=groups[o];let gv=0;g.forEach(i=>{const v=vNow(i);if(v!=null)gv+=v});
+    h+='<div class="sec"><h2>'+esc(o||'ملكي')+'</h2><span class="num" style="font-size:14px">'+N(fmt(gv))+' ج</span></div><div class="list">';
+    g.slice().sort((a,b)=>b.t-a.t).forEach(i=>{
+      const v=vNow(i),d=v!=null&&i.cost>0?Math.round((v-i.cost)*100)/100:null;
+      h+='<button class="row" data-act="vtEdit" data-id="'+esc(i.id)+'"><div class="mid"><div class="t1">'+esc(vkL(i.k))+' · '+N(fmt(i.q))+' '+vkU(i.k)+'</div>'
+        +'<div class="t2">'+(i.cost>0?'شراء '+N(fmt(i.cost))+' ج':'من غير سعر شراء')+(i.note?' · '+esc(i.note):'')+'</div></div>'
+        +'<div style="text-align:left"><div class="num">'+(v!=null?N(fmt(v))+' ج':'حدّد السعر')+'</div>'
+        +(d!=null?'<div style="font-size:12px;color:var('+(d>=0?'--in':'--out')+')">'+(d>=0?'+':'-')+N(fmt(Math.abs(d)))+'</div>':'')+'</div></button>';
+    });
+    h+='</div>';
+  });
+  h+='<div class="btns">'+btn('vtNew','+ إضافة ذهب أو فضة أو عملة','primary')+'</div>';
+  return h;
+}
+function vtSheet(){
+  const ppl=peopleAll().sort((a,b)=>b.last-a.last||a.name.localeCompare(b.name,'ar')).slice(0,12);
+  const ed=!!VS.id;
+  openSheet('<h3>'+(ed?'تعديل':'إضافة')+' أمانة</h3>'
+    +'<div class="field"><span class="lbl2">النوع</span><div class="chips">'+VK.map(k=>'<button class="chip sm'+(VS.k===k[0]?' on':'')+'" data-act="vtKind" data-k="'+k[0]+'">'+k[1]+'</button>').join('')+'</div></div>'
+    +'<div class="field"><label for="vtQ">'+(VS.k==='sar'?'المبلغ بالريال':'الوزن بالجرام')+'</label><input type="text" id="vtQ" inputmode="decimal" autocomplete="off" value="'+esc(VS.q)+'" data-in="vtQ" placeholder="0"></div>'
+    +'<div class="field"><span class="lbl2">صاحب الأمانة</span><div class="chips"><button class="chip sm'+(!VS.own.trim()?' on':'')+'" data-act="vtOwnPick" data-p="">ملكي</button>'
+    +ppl.map(q=>'<button class="chip sm'+(VS.own.trim()===q.name?' on':'')+'" data-act="vtOwnPick" data-p="'+esc(encodeURIComponent(q.name))+'">'+esc(q.name)+'</button>').join('')+'</div>'
+    +'<input type="text" id="vtOwn" autocomplete="off" value="'+esc(VS.own)+'" data-in="vtOwn" placeholder="أو اكتب اسم تاني" style="margin-top:6px"></div>'
+    +'<div class="field"><label for="vtCost">سعر الشراء الإجمالي بالجنيه (اختياري)</label><input type="text" id="vtCost" inputmode="decimal" autocomplete="off" value="'+esc(VS.cost)+'" data-in="vtCost" placeholder="0"></div>'
+    +'<div class="field"><label for="vtNote">ملاحظة (اختياري)</label><input type="text" id="vtNote" autocomplete="off" value="'+esc(VS.note)+'" data-in="vtNote" placeholder="مثلًا: سبيكة 50 جرام"></div>'
+    +'<div id="vtErr"></div><div class="btns">'+btn('vtSave','حفظ','primary')+(ed?btn('vtDel','مسح (فيه تراجع)'):'')+'</div>');
+}
+function vpSheet(){
+  const pr=vault().prices;
+  openSheet('<h3>سعر النهارده</h3><div style="font-size:14px;color:var(--muted)">اكتب سعر الجرام بالجنيه (والريال بسعره بالجنيه). أو اضغط الزرار يجيبه تقريبي من السعر العالمي وإنت تعدّله على سعر الصاغة.</div>'
+    +'<div class="btns" style="margin-top:8px">'+btn('vtFetch','🌐 هات السعر العالمي تقريبي')+'</div><div id="vpMsg"></div>'
+    +VK.map(k=>'<div class="field"><label for="vp_'+k[0]+'">'+k[1]+' — سعر ال'+k[2]+' بالجنيه</label><input type="text" id="vp_'+k[0]+'" inputmode="decimal" autocomplete="off" value="'+esc(+pr[k[0]]>0?pr[k[0]]:'')+'" data-in="vtPrice" data-k="'+k[0]+'" placeholder="0"></div>').join('')
+    +'<div id="vpErr"></div><div class="btns">'+btn('vtPSave','حفظ الأسعار','primary')+'</div>');
+  VP=Object.assign({},pr);
+}
+Object.assign(ACT,{
+  vtFilter(el){ui.vOwn=decodeURIComponent(el.dataset.o);render()},
+  vtNew(){VS={id:'',k:'g21',q:'',own:'',cost:'',note:''};vtSheet()},
+  vtEdit(el){const i=vault().items.find(x=>x.id===el.dataset.id);if(!i)return;VS={id:i.id,k:i.k,q:String(i.q),own:i.own||'',cost:i.cost>0?String(i.cost):'',note:i.note||''};vtSheet()},
+  vtKind(el){VS.k=el.dataset.k;vtSheet()},
+  vtOwnPick(el){VS.own=decodeURIComponent(el.dataset.p);vtSheet()},
+  vtSave(){
+    const q=parseNum(VS.q),c=VS.cost.trim()?parseNum(VS.cost):0,e=$('#vtErr');
+    const err=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
+    if(!(q>0))return err('اكتب الوزن أو المبلغ');
+    if(isNaN(c)||c<0)return err('سعر الشراء مش مظبوط');
+    const V=vault(),rec={k:VS.k,q:Math.round(q*1000)/1000,own:VS.own.trim(),cost:Math.round(c*100)/100,note:VS.note.trim()};
+    if(VS.id){const i=V.items.find(x=>x.id===VS.id);if(i)Object.assign(i,rec)}else V.items.push(Object.assign({id:gid(),t:Date.now()},rec));
+    closeSheet();touch({meta:true});render();toast('اتحفظت');
+  },
+  vtDel(){
+    const V=vault(),i=V.items.findIndex(x=>x.id===VS.id);if(i<0)return;
+    const old=V.items.splice(i,1)[0];closeSheet();touch({meta:true});render();
+    toast('اتمسحت',()=>{vault().items.push(old);touch({meta:true});render()});
+  },
+  vtPrices(){vpSheet()},
+  vtPSave(){
+    const pr={},bad=[];
+    VK.forEach(k=>{const raw=(VP[k[0]]==null?'':String(VP[k[0]])).trim();if(!raw)return;const v=parseNum(raw);if(!(v>0))bad.push(k[1]);else pr[k[0]]=Math.round(v*100)/100});
+    if(bad.length){$('#vpErr').innerHTML='<div class="warn" style="margin-top:6px">السعر مش مظبوط في: '+esc(bad.join('، '))+'</div>';return}
+    const V=vault();V.prices=Object.assign({},V.prices,pr);V.pt=Date.now();
+    closeSheet();touch({meta:true});render();toast('اتحدّثت الأسعار');
+  },
+  async vtFetch(){
+    const m=$('#vpMsg');m.innerHTML='<div class="warn" style="margin-top:6px">بجيب السعر...</div>';
+    const get=async u=>{const c=new AbortController(),t=setTimeout(()=>c.abort(),9000);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(t)}};
+    try{
+      const [fx,au,ag]=await Promise.all([get('https://open.er-api.com/v6/latest/USD'),get('https://api.gold-api.com/price/XAU'),get('https://api.gold-api.com/price/XAG')]);
+      const egp=fx&&fx.rates&&fx.rates.EGP,sar=fx&&fx.rates&&fx.rates.SAR,xau=au&&au.price,xag=ag&&ag.price;
+      if(!(egp>0&&sar>0&&xau>0&&xag>0))throw new Error('bad data');
+      const gr=xau/31.1035*egp,r2=n=>Math.round(n*100)/100;
+      const vals={g24:r2(gr),g21:r2(gr*21/24),g18:r2(gr*18/24),sil:r2(xag/31.1035*egp),sar:r2(egp/sar)};
+      Object.keys(vals).forEach(k=>{VP[k]=String(vals[k]);const i=document.getElementById('vp_'+k);if(i)i.value=vals[k]});
+      m.innerHTML='<div class="ok" style="margin-top:6px">اتملّت الأسعار من السعر العالمي بعد التحويل للجنيه. سعر الصاغة عندنا بيفرق (مصنعية وفرق سوق)، فعدّلها لو لازم وبعدين احفظ.</div>';
+    }catch(e){m.innerHTML='<div class="warn" style="margin-top:6px">مقدرتش أجيب السعر دلوقتي (النت أو المصدر). اكتب الأسعار بإيدك.</div>'}
+  }
+});
+Object.assign(INP,{
+  vtQ(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VS.q=v},
+  vtCost(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VS.cost=v},
+  vtOwn(el){VS.own=el.value},
+  vtNote(el){VS.note=el.value},
+  vtPrice(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VP[el.dataset.k]=v}
+});
 
 /* ---------- تشغيل ---------- */
 const app=$('#app');
