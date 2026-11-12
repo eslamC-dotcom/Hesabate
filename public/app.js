@@ -1290,7 +1290,7 @@ function vVault(){
   const groups={};items.forEach(i=>{(groups[i.own||'']=groups[i.own||'']||[]).push(i)});
   Object.keys(groups).forEach(o=>{
     const g=groups[o];let gv=0;g.forEach(i=>{const v=vNow(i);if(v!=null)gv+=v});
-    h+='<div class="sec"><h2>'+esc(o||'ملكي')+'</h2><span class="num" style="font-size:14px">'+N(fmt(gv))+' ج</span></div><div class="list">';
+    h+='<div class="sec"><h2>'+esc(o||'ملكي')+'</h2><span><button class="link" data-act="vtNew" data-o="'+esc(encodeURIComponent(o))+'">+ إضافة له</button> <span class="num" style="font-size:14px">'+N(fmt(gv))+' ج</span></span></div><div class="list">';
     g.slice().sort((a,b)=>b.t-a.t).forEach(i=>{
       const v=vNow(i),d=v!=null&&i.cost>0?Math.round((v-i.cost)*100)/100:null;
       h+='<button class="row" data-act="vtEdit" data-id="'+esc(i.id)+'"><div class="mid"><div class="t1">'+esc(vkL(i.k))+' · '+N(fmt(i.q))+' '+vkU(i.k)+'</div>'
@@ -1314,30 +1314,35 @@ function vtSheet(){
     +'<input type="text" id="vtOwn" autocomplete="off" value="'+esc(VS.own)+'" data-in="vtOwn" placeholder="أو اكتب اسم تاني" style="margin-top:6px"></div>'
     +'<div class="field"><label for="vtCost">سعر الشراء الإجمالي بالجنيه (اختياري)</label><input type="text" id="vtCost" inputmode="decimal" autocomplete="off" value="'+esc(VS.cost)+'" data-in="vtCost" placeholder="0"></div>'
     +'<div class="field"><label for="vtNote">ملاحظة (اختياري)</label><input type="text" id="vtNote" autocomplete="off" value="'+esc(VS.note)+'" data-in="vtNote" placeholder="مثلًا: سبيكة 50 جرام"></div>'
-    +'<div id="vtErr"></div><div class="btns">'+btn('vtSave','حفظ','primary')+(ed?btn('vtDel','مسح (فيه تراجع)'):'')+'</div>');
+    +'<div id="vtErr"></div><div class="btns">'+btn('vtSave','حفظ','primary')+(ed?btn('vtDel','مسح (فيه تراجع)'):btn('vtSave','حفظ وإضافة تانية له','','data-again="1"'))+'</div>');
 }
 function vpSheet(){
   const pr=vault().prices;
   openSheet('<h3>سعر النهارده</h3><div style="font-size:14px;color:var(--muted)">اكتب سعر الجرام بالجنيه (والريال بسعره بالجنيه). أو اضغط الزرار يجيبه تقريبي من السعر العالمي وإنت تعدّله على سعر الصاغة.</div>'
+    +'<div class="field" style="margin-top:8px"><label for="vpPrem">فرق السوق % (بيتضاف على السعر العالمي للذهب والفضة، مثلًا 3)</label><input type="text" id="vpPrem" inputmode="decimal" autocomplete="off" value="'+esc(vault().premium>0?vault().premium:'')+'" data-in="vtPrem" placeholder="0"></div>'
     +'<div class="btns" style="margin-top:8px">'+btn('vtFetch','🌐 هات السعر العالمي تقريبي')+'</div><div id="vpMsg"></div>'
     +VK.map(k=>'<div class="field"><label for="vp_'+k[0]+'">'+k[1]+' — سعر ال'+k[2]+' بالجنيه</label><input type="text" id="vp_'+k[0]+'" inputmode="decimal" autocomplete="off" value="'+esc(+pr[k[0]]>0?pr[k[0]]:'')+'" data-in="vtPrice" data-k="'+k[0]+'" placeholder="0"></div>').join('')
     +'<div id="vpErr"></div><div class="btns">'+btn('vtPSave','حفظ الأسعار','primary')+'</div>');
-  VP=Object.assign({},pr);
+  VP=Object.assign({},pr);VP.prem=vault().premium>0?String(vault().premium):'';
 }
 Object.assign(ACT,{
   vtFilter(el){ui.vOwn=decodeURIComponent(el.dataset.o);render()},
-  vtNew(){VS={id:'',k:'g21',q:'',own:'',cost:'',note:''};vtSheet()},
+  vtNew(el){VS={id:'',k:(vault().lastK||'g24'),q:'',own:el&&el.dataset&&el.dataset.o?decodeURIComponent(el.dataset.o):'',cost:'',note:''};vtSheet()},
   vtEdit(el){const i=vault().items.find(x=>x.id===el.dataset.id);if(!i)return;VS={id:i.id,k:i.k,q:String(i.q),own:i.own||'',cost:i.cost>0?String(i.cost):'',note:i.note||''};vtSheet()},
   vtKind(el){VS.k=el.dataset.k;vtSheet()},
   vtOwnPick(el){VS.own=decodeURIComponent(el.dataset.p);vtSheet()},
-  vtSave(){
+  vtSave(el){
+    const again=!!(el&&el.dataset&&el.dataset.again);
     const q=parseNum(VS.q),c=VS.cost.trim()?parseNum(VS.cost):0,e=$('#vtErr');
     const err=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
     if(!(q>0))return err('اكتب الوزن أو المبلغ');
     if(isNaN(c)||c<0)return err('سعر الشراء مش مظبوط');
     const V=vault(),rec={k:VS.k,q:Math.round(q*1000)/1000,own:VS.own.trim(),cost:Math.round(c*100)/100,note:VS.note.trim()};
     if(VS.id){const i=V.items.find(x=>x.id===VS.id);if(i)Object.assign(i,rec)}else V.items.push(Object.assign({id:gid(),t:Date.now()},rec));
-    closeSheet();touch({meta:true});render();toast('اتحفظت');
+    V.lastK=VS.k;
+    touch({meta:true});render();
+    if(again&&!VS.id){const o=VS.own,k=VS.k;toast('اتحفظت، كمّل الإضافة');VS={id:'',k:k,q:'',own:o,cost:'',note:''};vtSheet()}
+    else{closeSheet();toast('اتحفظت')}
   },
   vtDel(){
     const V=vault(),i=V.items.findIndex(x=>x.id===VS.id);if(i<0)return;
@@ -1350,6 +1355,7 @@ Object.assign(ACT,{
     VK.forEach(k=>{const raw=(VP[k[0]]==null?'':String(VP[k[0]])).trim();if(!raw)return;const v=parseNum(raw);if(!(v>0))bad.push(k[1]);else pr[k[0]]=Math.round(v*100)/100});
     if(bad.length){$('#vpErr').innerHTML='<div class="warn" style="margin-top:6px">السعر مش مظبوط في: '+esc(bad.join('، '))+'</div>';return}
     const V=vault();V.prices=Object.assign({},V.prices,pr);V.pt=Date.now();
+    const pm=(VP.prem||'').trim()?parseNum(VP.prem):0;V.premium=pm>0&&pm<100?Math.round(pm*100)/100:0;
     closeSheet();touch({meta:true});render();toast('اتحدّثت الأسعار');
   },
   async vtFetch(){
@@ -1359,8 +1365,9 @@ Object.assign(ACT,{
       const [fx,au,ag]=await Promise.all([get('https://open.er-api.com/v6/latest/USD'),get('https://api.gold-api.com/price/XAU'),get('https://api.gold-api.com/price/XAG')]);
       const egp=fx&&fx.rates&&fx.rates.EGP,sar=fx&&fx.rates&&fx.rates.SAR,xau=au&&au.price,xag=ag&&ag.price;
       if(!(egp>0&&sar>0&&xau>0&&xag>0))throw new Error('bad data');
-      const gr=xau/31.1035*egp,r2=n=>Math.round(n*100)/100;
-      const vals={g24:r2(gr),g21:r2(gr*21/24),g18:r2(gr*18/24),sil:r2(xag/31.1035*egp),sar:r2(egp/sar)};
+      const pm=(VP.prem||'').trim()?parseNum(VP.prem):0,f=1+(pm>0&&pm<100?pm:0)/100;
+      const gr=xau/31.1035*egp*f,r2=n=>Math.round(n*100)/100;
+      const vals={g24:r2(gr),g21:r2(gr*21/24),g18:r2(gr*18/24),sil:r2(xag/31.1035*egp*f),sar:r2(egp/sar)};
       Object.keys(vals).forEach(k=>{VP[k]=String(vals[k]);const i=document.getElementById('vp_'+k);if(i)i.value=vals[k]});
       m.innerHTML='<div class="ok" style="margin-top:6px">اتملّت الأسعار من السعر العالمي بعد التحويل للجنيه. سعر الصاغة عندنا بيفرق (مصنعية وفرق سوق)، فعدّلها لو لازم وبعدين احفظ.</div>';
     }catch(e){m.innerHTML='<div class="warn" style="margin-top:6px">مقدرتش أجيب السعر دلوقتي (النت أو المصدر). اكتب الأسعار بإيدك.</div>'}
@@ -1371,6 +1378,7 @@ Object.assign(INP,{
   vtCost(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VS.cost=v},
   vtOwn(el){VS.own=el.value},
   vtNote(el){VS.note=el.value},
+  vtPrem(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VP.prem=v},
   vtPrice(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VP[el.dataset.k]=v}
 });
 
