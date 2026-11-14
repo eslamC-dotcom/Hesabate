@@ -1561,7 +1561,7 @@ function waSheet(name,num,intro,msg0){
     +'<div class="field"><label for="waNum">رقم واتساب</label><input type="text" id="waNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(WA.num)+'" data-in="waNum"></div>'
     +'<div class="field"><label for="waMsg">الرسالة (تقدر تعدّل فيها)</label><textarea id="waMsg" style="min-height:170px" data-in="waMsg">'+esc(WA.msg)+'</textarea></div>'
     +'<div class="field"><label for="waImg">سكرين التحويل (اختياري)</label><input type="file" id="waImg" accept="image/*" data-in="waImg"><div id="waImgInfo" style="font-size:13px;color:var(--muted)"></div></div>'
-    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waShare','ابعت الرسالة مع الصورة')+btn('waCopy','نسخ الرسالة')+btn('sheetClose','تخطي، من غير رسالة')+'</div>'
+    +'<div id="waErr"></div><div class="btns">'+btn('waSend','افتح واتساب','primary')+btn('waShare','افتح محادثته (وارفق الصورة بإيدك)')+btn('waShare2','مشاركة الصورة والرسالة (هختار الشخص)')+btn('waCopy','نسخ الرسالة')+btn('sheetClose','تخطي، من غير رسالة')+'</div>'
     +'<p style="font-size:13px;color:var(--muted);margin:10px 0 0">هيفتح واتساب والرسالة جاهزة، وإنت اللي بتضغط إرسال. التطبيق مش بيبعت لوحده.</p>',()=>openPerson(name));
 }
 function addPersonSheet(){
@@ -1595,7 +1595,13 @@ Object.assign(ACT,{
     a.href='https://wa.me/2'+v+'?text='+encodeURIComponent(WA.msg);a.target='_blank';a.rel='noopener';
     document.body.appendChild(a);a.click();a.remove();
   },
-  async waShare(){
+  waShare(){
+    const e=$('#waErr'),v=normPhone(WA.num);
+    if(!okPhone(v)){e.innerHTML='<div class="warn" style="margin-top:6px">اكتب رقم واتساب '+esc(WA.name)+' الأول، أو استخدم "مشاركة الصورة والرسالة".</div>';return}
+    ACT.waSend();
+    e.innerHTML='<div class="ok" style="margin-top:6px">فتحت محادثة '+esc(WA.name)+' والرسالة جاهزة. واتساب مبيسمحش بإرسال صورة لرقم معيّن من لينك، فاضغط 📎 في المحادثة وارفق صورة التحويل من المعرض.</div>';
+  },
+  async waShare2(){
     const e=$('#waErr'),warn=m=>{e.innerHTML='<div class="warn" style="margin-top:6px">'+esc(m)+'</div>'};
     if(!WA.file)return warn('اختار صورة السكرين الأول من الخانة اللي فوق');
     if(!(WA.msg||'').trim())return warn('الرسالة فاضية');
@@ -1715,7 +1721,7 @@ function renderOp(){
     +'<input type="text" id="oAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.amt)+'" data-in="oAmt" aria-label="المبلغ بالجنيه" style="margin-top:10px">'
     +'<div class="field"><span class="lbl2">'+(out?'بيطلع من حساب':'بيدخل في حساب')+'</span><div class="chips">'+chips+'</div>'
     +'<div class="card" id="oFlow" style="margin-top:6px;text-align:center;font-weight:600"></div></div>'
-    +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
+    +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div style="font-size:13px;color:var(--muted);margin-top:4px">ممكن يكون رقم أي حد. الحساب بيتسجّل على '+esc(OS.name)+' والرسالة بتروح لواتساب بتاعه.</div><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
     +(out?'<div class="field"><label for="oFee">رسوم العملية (اختياري)</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
     +'<div class="field"><label for="oLine">صياغة الرسالة (غيّرها وهفتكرها المرة الجاية)</label><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine"></div>'
     +'<div class="lbl2">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
@@ -1729,18 +1735,22 @@ function opSave(){
   const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=Date.now(),out=opOut(o);
   const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:o.l,op:o.k};
   const txs=[x],fee=out?parseNum(OS.fee):NaN;
-  if(fee>0)txs.push({id:gid(),t:now,type:'exp',amt:r2(fee),from:OS.acc,to:null,person:null,cat:'رسوم',once:false,note:'رسوم '+o.l});
+  const onP=fee>0&&o.t==='lend';
+  if(fee>0)txs.push({id:gid(),t:now,type:onP?'lend':'exp',amt:r2(fee),from:OS.acc,to:null,person:onP?name:null,cat:onP?null:'رسوم',once:false,note:'رسوم '+o.l,feeOf:x.id});
+  /* رقم التحويل ممكن يكون لأي حد: مابنغيّرش رقم واتساب الشخص المحفوظ بيه */
   const cs=contacts(),nv=normPhone(OS.num);let ci=cs.findIndex(k=>k.n===name);
-  if(ci<0){cs.push({n:name,p:okPhone(nv)?nv:''});ci=cs.length-1}else if(okPhone(nv))cs[ci].p=nv;
+  const newC=ci<0;
+  if(newC){cs.push({n:name,p:okPhone(nv)?nv:''});ci=cs.length-1}
+  if(okPhone(nv))x.num=nv;
   const m=S.meta;m.opAcc=m.opAcc||{};m.opAcc[o.k]=OS.acc;
   const line=(OS.line||'').trim()||opLine(),def=opTmpl(o).split('{المبلغ}').join(fmt(amt));
   if(OS.edited&&line!==def){m.opTmpl=m.opTmpl||{};const a=fmt(amt);m.opTmpl[o.k]=line.indexOf(a)>=0?line.split(a).join('{المبلغ}'):line}
   const ids=txs.map(y=>y.id);
   S.tx=S.tx.concat(txs);
-  const msg=stmtMsg(name,line);
+  const msg=stmtMsg(name,line+(onP?' (+ عمولة التحويل '+fmt(fee)+' ج متضافة على الحساب)':''));
   touch({meta:true});
   toast('اتسجّل: '+o.l+' '+fmt(amt)+' ج.م',()=>{S.tx=S.tx.filter(y=>ids.indexOf(y.id)<0);touch({})});
-  waSheet(name,cs[ci].p,'اتسجّلت العملية. الرسالة جاهزة، اضغط افتح واتساب.',msg);
+  waSheet(name,cs[ci].p,'اتسجّلت العملية'+(onP?' والعمولة اتضافت على حساب '+name:'')+'.'+(cs[ci].p?' الرسالة جاهزة لواتساب '+name+'، اضغط افتح واتساب.':' اكتب رقم واتساب '+name+' (رقم التحويل ممكن يكون رقم حد تاني).'),msg);
 }
 let curPB=null;
 function openPerson(name,back){
