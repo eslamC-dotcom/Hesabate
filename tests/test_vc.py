@@ -16,7 +16,7 @@ def sc(pg):
     pg.click('[data-act="vGen"]'); pg.wait_for_timeout(300); pg.click('[data-act="vDone"]'); pg.wait_for_timeout(400)
     if pg.input_value('#waNum') != '01099998888': BAD.append('vc: الرسالة مش رايحة لرقم الشخص: ' + pg.input_value('#waNum'))
     m = pg.input_value('#waMsg')
-    if 'تحويل فودافون كاش: *1,010 ج*' not in m or 'الإجمالي عليك: 1,010' not in m: BAD.append('vc: الرسوم مش متضافة على المبلغ: ' + m)
+    if 'تحويل فودافون كاش: 1,010 ج' not in m or 'الرصيد المتبقي: 1,010' not in m: BAD.append('vc: الرسوم مش متضافة على المبلغ: ' + m)
     if m.count('تحويل فودافون كاش') != 1: BAD.append('vc: سطر الرسوم ظاهر لوحده')
 def sc2(pg):
     """من صفحة الشخص: تحويل فودافون كاش لرقم تاني مع عمولة جنيه."""
@@ -28,7 +28,7 @@ def sc2(pg):
     pg.click('[data-act="oSave"]'); pg.wait_for_timeout(400)
     if pg.input_value('#waNum') != '01099998888': BAD.append('op: الرسالة مش رايحة لرقم الشخص: ' + pg.input_value('#waNum'))
     m = pg.input_value('#waMsg')
-    if 'تحويل فودافون كاش: *9,001 ج*' not in m or 'الإجمالي عليك: 9,001' not in m: BAD.append('op: العمولة مش متضافة: ' + m)
+    if 'تحويل فودافون كاش: 9,001 ج' not in m or 'الرصيد المتبقي: 9,001' not in m: BAD.append('op: العمولة مش متضافة: ' + m)
     # الرقم المحفوظ للشخص ماتغيّرش
     pg.click('[data-act="sheetClose"]'); pg.wait_for_timeout(200)
     pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)

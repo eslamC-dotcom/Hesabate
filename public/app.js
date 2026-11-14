@@ -2416,35 +2416,40 @@ function stmtMsg(name,head,extra){
     const f=all0.filter(y=>y.feeOf&&y.feeOf===x.id).reduce((n,y)=>n+y.amt,0);
     return f?Object.assign({},x,{amt:Math.round((x.amt+f)*100)/100}):x});
   const W={lend:'سلف',repay_in:'سداد',borrow:'حساب فاتورة',repay_out:'سداد ليك'};
-  const sg=x=>TYPES[x.type].debt,MAX=10;
-  const rows=all.slice(-MAX),older=all.slice(0,Math.max(0,all.length-MAX));
-  let prior=0;older.forEach(x=>prior+=sg(x)*x.amt);prior=Math.round(prior*100)/100;
-  let up=0,dn=0;all.forEach(x=>{if(sg(x)>0)up+=x.amt;else dn+=x.amt});
-  up=Math.round(up*100)/100;dn=Math.round(dn*100)/100;
-  const net=Math.round((up-dn)*100)/100,LN='━━━━━━━━━━━━';
-  /* الجانب الأساسي (اللي بيتحسب "الإجمالي"): اللي عليه الرصيد؛ لو خالص ناخد أول حركة. الباقي = سداد */
+  const sg=x=>TYPES[x.type].debt,MAX=10,r2=n=>Math.round(n*100)/100;
+  /* الرصيد الجاري بعد كل حركة (موجب = الشخص عليه لي) */
+  const run=[];let acc=0;all.forEach(x=>{acc=r2(acc+sg(x)*x.amt);run.push(acc)});
+  const net=all.length?run[run.length-1]:0,NET0=Math.abs(net)<0.005;
+  /* الجانب الأساسي: اللي عليه الرصيد؛ لو خالص ناخد أول حركة */
   const pos=net>0.004?1:net<-0.004?-1:(all.length?sg(all[0]):1);
-  const tot=pos>0?up:dn,paid=pos>0?dn:up;
-  const L=[];
+  /* نبدأ من بعد آخر مرة الحساب اتصفّر فيها (لو الحساب خالص دلوقتي بنعرض الدورة اللي لسه قافلة)، ولو الفترة أطول من 10 حركات نعرض آخر 10 */
+  let start=0;
+  for(let i=all.length-2;i>=0;i--){if(Math.abs(run[i])<0.005){start=i+1;break}}
+  let from=start;
+  if(all.length-from>MAX)from=all.length-MAX;
+  const rows=all.slice(from),prior=from>0?run[from-1]:0;
+  const LN='━━━━━━━━━━━━━━━━',L=[];
   if(head&&head.trim())L.push('🆕 '+head.trim(),'');
-  L.push('📋 *تفاصيل حسابنا*',LN);
-  if(older.length&&Math.abs(prior)>0.004)L.push('▫️ قبل كده: '+(prior>0?'عليك ':'ليك عندي ')+fmt(Math.abs(prior))+' ج');
-  rows.forEach(x=>{
-    const o=x.op&&opBy(x.op),lbl=o?o.l:stmtLbl(x,W[x.type]);
-    L.push((sg(x)===pos?'':'➖ ')+dm(x.t)+' — '+lbl+': *'+fmt(x.amt)+' ج*');
+  L.push('🧾 *حسابك عندنا*',LN,'');
+  if(Math.abs(prior)>0.004)L.push('▫️ رصيد سابق: '+(prior*pos>0?'عليك ':'ليك عندي ')+fmt(Math.abs(prior))+' ج','');
+  /* حركات مجمّعة بالتاريخ، وتحت كل حركة الرصيد */
+  const groups=[];
+  rows.forEach((x,i)=>{
+    const d=dm(x.t),g=groups.length&&groups[groups.length-1].d===d?groups[groups.length-1]:(groups.push({d:d,items:[]}),groups[groups.length-1]);
+    g.items.push({x:x,bal:r2(pos*run[from+i]),first:i===0});
   });
-  if(!rows.length)L.push('لسه مفيش حركات');
-  L.push(LN);
-  if(paid>0.004){
-    L.push('الإجمالي: '+fmt(tot)+' ج');
-    L.push('السداد: '+fmt(paid)+' ج');
-    if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
-    else if(net>0)L.push('💰 *الباقي عليك: '+fmt(net)+' ج*');
-    else L.push('💰 *الباقي ليك عندي: '+fmt(-net)+' ج*');
-  }else{
-    if(Math.abs(net)<0.005)L.push('✅ *حسابنا خالص*');
-    else L.push('💰 *الإجمالي'+(net>0?' عليك: ':' ليك عندي: ')+fmt(Math.abs(net))+' ج*');
-  }
+  groups.forEach((g,gi)=>{
+    L.push('📅 '+g.d,'');
+    g.items.forEach(it=>{
+      const x=it.x,o=x.op&&opBy(x.op),lbl=o?o.l:stmtLbl(x,W[x.type]),up=sg(x)===pos;
+      L.push((up?(it.first?'🔹':'➕'):'➖')+' '+lbl+': '+fmt(x.amt)+' ج','💰 الرصيد: '+fmt(it.bal)+' ج','');
+    });
+    L.push(LN);if(gi<groups.length-1)L.push('');
+  });
+  if(!rows.length)L.push('لسه مفيش حركات',LN);
+  if(NET0)L.push('✅ *حسابنا خالص*');
+  else if(net>0)L.push('🔴 *الرصيد المتبقي: '+fmt(net)+' جنيه*');
+  else L.push('🟢 *الرصيد المتبقي ليك عندي: '+fmt(-net)+' جنيه*');
   const cd=contactFor(name);
   if(cd&&cd.due&&net>0.004)L.push('📅 ميعاد السداد: '+dm(cd.due));
   return L.join('\n');

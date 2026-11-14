@@ -38,8 +38,8 @@ def scenario(pg):
     pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)
     pg.click('#view .row:has-text("أحمد")'); pg.wait_for_timeout(300); chk(pg, 'person')
     pg.click('[data-act="waOpen"]'); pg.wait_for_timeout(300); chk(pg, 'wa')
-    if 'تفاصيل حسابنا' not in pg.input_value('#waMsg') or 'الباقي عليك: 300' not in pg.input_value('#waMsg'): BAD.append('wa: كشف الحساب غلط أو فاضي')
-    if '➕' in pg.input_value('#waMsg'): BAD.append('wa: لسه فيه ➕')
+    if 'حسابك عندنا' not in pg.input_value('#waMsg') or 'الرصيد المتبقي: 300' not in pg.input_value('#waMsg'): BAD.append('wa: كشف الحساب غلط أو فاضي')
+    if '🔹' not in pg.input_value('#waMsg'): BAD.append('wa: أول سطر مفيهوش 🔹')
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
     # كشف حساب حد اتحوّله من فودافون كاش
     pg.click('#view .row:has-text("منى")'); pg.wait_for_timeout(300)
@@ -49,7 +49,7 @@ def scenario(pg):
     pg.keyboard.press('Escape'); pg.keyboard.press('Escape')
     # كشف حد دفع عني فاتورة: الإجمالي هو الفاتورة والسداد هو اللي سدّدته
     m = pg.evaluate("window.__hs.stmtMsg('زيد','تم حساب فاتورة',[{type:'repay_out',amt:40000,t:Date.now(),person:'زيد'},{type:'borrow',amt:60250,t:Date.now()+1,person:'زيد'}])")
-    if 'الإجمالي: 60,250' not in m or 'السداد: 40,000' not in m or 'ليك عندي: 20,250' not in m or 'استلف' in m: BAD.append('wa: الإجمالي والسداد متبدلين أو كلمة استلفت: '+m)
+    if '60,250 ج' not in m or '40,000 ج' not in m or 'المتبقي ليك عندي: 20,250' not in m or 'استلف' in m: BAD.append('wa: الإجمالي والسداد متبدلين أو كلمة استلفت: '+m)
     if '➖ ' in m.split('\n')[-1]: BAD.append('wa: علامة ➖ في الآخر')
     # زر السداد السريع + ميعاد السداد
     pg.click('.nav .tab[data-tab="people"]'); pg.wait_for_timeout(200)

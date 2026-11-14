@@ -19,3 +19,4 @@ jobs:
       - run: python3 tests/test_vc.py
       - run: python3 tests/test_vault.py
       - run: python3 tests/test_sms_match.py
+      - run: python3 tests/test_stmt.py
