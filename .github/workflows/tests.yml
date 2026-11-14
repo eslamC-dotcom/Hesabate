@@ -18,3 +18,4 @@ jobs:
       - run: python3 tests/test_smoke.py
       - run: python3 tests/test_vc.py
       - run: python3 tests/test_vault.py
+      - run: python3 tests/test_sms_match.py

@@ -2014,8 +2014,9 @@ findMatch=function(p,acc){
     let numOk=false;
     if(p.num){
       const xn=x.num||((x.note||'').match(PH_RE)||[])[1];
-      if(xn&&xn!==p.num)return;
-      numOk=!!xn;
+      /* الرقم المسجّل ممكن يكون رقم الشخص مش رقم التحويل الفعلي: مايمنعش المطابقة، بس بنحصرها في 12 ساعة والرقم المطابق له الأولوية */
+      if(xn&&xn!==p.num&&dt>12*36e5)return;
+      numOk=!!xn&&xn===p.num;
     }
     let s=null;
     if(p.dir==='out'||p.dir==null){if(x.from===acc&&!x.so)s='so'}
