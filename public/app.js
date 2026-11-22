@@ -1405,7 +1405,7 @@ function vcDefaultFrom(){
   const w=liveAccs().find(a=>a.kind==='wallet');return w?w.id:ids[0];
 }
 function vcOpen(){
-  VT={num:'',name:'',amt:'',fee:'',purpose:'exp',from:vcDefaultFrom()};
+  VT={num:'',name:'',amt:'',fee:'',dt:'',purpose:'exp',from:vcDefaultFrom()};
   openSheet('<h3>تحويل فودافون كاش</h3>'
     +(hasPicker()?'<div class="btns" style="margin-top:0">'+btn('pickContact','اختار من جهات الاتصال','primary','data-ctx="vc"')+'</div>':'')
     +'<div id="vDyn"></div>'
@@ -1415,7 +1415,7 @@ function vcOpen(){
     +'<div id="vContacts"></div>'
     +'<div class="field"><label for="vAmt">المبلغ بالجنيه</label><input type="text" id="vAmt" class="amount-in" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vAmt"></div>'
     +'<div id="vNote"></div>'
-    +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div><div style="font-size:13px;color:var(--muted);margin:-6px 0 8px">لو سلفة لشخص، الرسوم بتتضاف على حسابه لوحدها.</div>'
+    +'<div class="field"><label for="vFee">رسوم التحويل (اختياري، لو عايز تسجّلها)</label><input type="text" id="vFee" inputmode="decimal" autocomplete="off" placeholder="0" data-in="vFee"></div><div style="font-size:13px;color:var(--muted);margin:-6px 0 8px">لو سلفة لشخص، الرسوم بتتضاف على حسابه لوحدها.</div>'+dateFld('vDate','vDate',VT.dt)
     +'<div id="vErr"></div>'
     +'<div class="btns">'+btn('vGen','جهّز الكود','primary')+'</div>');
   vcDyn();
@@ -1454,7 +1454,7 @@ function vcGen(){
     +'<div class="btns" style="margin-top:14px">'+btn('vDone','وصلتني رسالة التأكيد، سجّل التحويل','primary')+btn('vBack','رجوع')+'</div>',()=>ACT.vBack());
 }
 function vcDone(){
-  const num=normPhone(VT.num),amt=Math.round(parseNum(VT.amt)*100)/100,fee=parseNum(VT.fee),pn=VT.name.trim(),now=Date.now();
+  const num=normPhone(VT.num),amt=Math.round(parseNum(VT.amt)*100)/100,fee=parseNum(VT.fee),pn=VT.name.trim(),now=tFromIso(VT.dt);
   const txs=[],base={id:gid(),t:now,amt:amt,from:VT.from,to:null,person:null,cat:null,once:false,note:(pn?pn+' · ':'')+num,num:num};
   if(VT.purpose==='exp'){base.type='exp';base.cat='تحويل فودافون كاش'}
   else{base.type=VT.purpose;base.person=pn}
@@ -1512,6 +1512,7 @@ Object.assign(INP,{
   vNum(el){VT.num=el.value;VT.numAuto=false;const b=$('#vContacts');if(b&&contacts().length)vcDyn()},
   vName(el){VT.name=el.value;vcNote();const pp=$('#vPpl');if(pp)vcDyn()},
   vAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.amt=v;vcNote()},
+  vDate(el){VT.dt=dateInp(el)},
   vFee(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;VT.fee=v;vcNote()}
 });
 
@@ -1702,7 +1703,7 @@ function opMsg(){
   const a=parseNum(OS.amt),prev=opPrevBal();
   const line=(OS.line||'').trim()||opLine();
   if(!(a>0))return line;
-  return stmtMsg(OS.name,line,[{type:OS.o.t,amt:a,op:OS.o.k,t:Date.now(),person:OS.name}]);
+  return stmtMsg(OS.name,line,[{type:OS.o.t,amt:a,op:OS.o.k,t:tFromIso(OS.dt),person:OS.name}]);
 }
 function opUpdate(){
   const pv=$('#oPrev');if(pv)pv.textContent=opMsg();
@@ -1711,7 +1712,7 @@ function opUpdate(){
 }
 function newOp(name,k){
   const o=opBy(k),c=contactFor(name);
-  OS={pb:curPB,name:name,o:o,amt:'',acc:opDefAcc(o),fee:'',num:(c&&c.p)||'',edited:false,line:''};
+  OS={pb:curPB,name:name,o:o,amt:'',acc:opDefAcc(o),fee:'',num:(c&&c.p)||'',edited:false,line:'',dt:''};
   OS.line=opLine();renderOp();
 }
 function renderOp(){
@@ -1723,6 +1724,7 @@ function renderOp(){
     +'<div class="card" id="oFlow" style="margin-top:6px;text-align:center;font-weight:600"></div></div>'
     +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div style="font-size:13px;color:var(--muted);margin-top:4px">ممكن يكون رقم أي حد. الحساب بيتسجّل على '+esc(OS.name)+' والرسالة بتروح لواتساب بتاعه.</div><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
     +(out?'<div class="field"><label for="oFee">رسوم العملية (اختياري)</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
+    +dateFld('oDate','oDate',OS.dt)
     +'<div class="field"><label for="oLine">صياغة الرسالة (غيّرها وهفتكرها المرة الجاية)</label><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine"></div>'
     +'<div class="lbl2">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
     +'<div class="btns">'+btn('oSave','سجّل وجهّز الرسالة','primary')+(o.ussd?btn('oDial','افتح الاتصال بالكود'):'')+'</div>',()=>openPerson(OS.name,OS.pb));
@@ -1732,7 +1734,7 @@ function renderOp(){
 function opSave(){
   const amt=r2(parseNum(OS.amt));
   if(!(amt>0)){toast('اكتب المبلغ الأول');return}
-  const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=Date.now(),out=opOut(o);
+  const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=tFromIso(OS.dt),out=opOut(o);
   const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:o.l,op:o.k};
   const txs=[x],fee=out?parseNum(OS.fee):NaN;
   const onP=fee>0&&o.t==='lend';
@@ -1794,6 +1796,7 @@ Object.assign(ACT,{
   }
 });
 Object.assign(INP,{
+  oDate(el){OS.dt=dateInp(el);opUpdate()},
   oAmt(el){
     const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;OS.amt=v;
     if(!OS.edited){OS.line=opLine();const l=$('#oLine');if(l)l.value=OS.line}
@@ -2318,10 +2321,11 @@ function payOpen(name){
   const p=people().find(q=>q.name===name)||{bal:0},L=S.meta.last||{},ids=liveAccs().map(a=>a.id);
   const dir=p.bal<-0.004?'out':'in';
   const pref=L[(dir==='out'?'repay_out_from':'repay_in_to')];
-  PAY={name:name,dir:dir,amt:Math.abs(p.bal)>0.004?String(Math.abs(p.bal)):'',acc:ids.indexOf(pref)>=0?pref:ids[0],note:''};
+  PAY={name:name,dir:dir,amt:Math.abs(p.bal)>0.004?String(Math.abs(p.bal)):'',acc:ids.indexOf(pref)>=0?pref:ids[0],note:'',dt:''};
   openSheet('<h3>سداد — '+esc(name)+'</h3>'
     +'<input type="text" inputmode="decimal" autocomplete="off" id="payAmt" class="amount-in" placeholder="0" value="'+esc(PAY.amt)+'" data-in="payAmt" aria-label="المبلغ">'
     +'<div id="payDyn"></div>'
+    +dateFld('payDate','payDate','')
     +'<div class="field"><label for="payNote">ملاحظة (اختياري)</label><input type="text" id="payNote" autocomplete="off" data-in="payNote"></div>'
     +'<div id="payErr"></div><div class="btns">'+btn('paySave','سجّل السداد','primary')+'</div>',()=>openPerson(name));
   payDyn();
@@ -2335,7 +2339,7 @@ Object.assign(ACT,{
     const amt=parseFloat(normDigits(String(PAY.amt)).replace(/,/g,'')),e=$('#payErr');
     if(!(amt>0)){e.innerHTML='<div class="warn" style="margin-top:6px">اكتب المبلغ</div>';return}
     const out=PAY.dir==='out',a=Math.round(amt*100)/100;
-    const x={id:gid(),t:Date.now(),type:out?'repay_out':'repay_in',amt:a,from:out?PAY.acc:null,to:out?null:PAY.acc,person:PAY.name,cat:null,once:false,note:PAY.note.trim()||'سداد'};
+    const x={id:gid(),t:tFromIso(PAY.dt),type:out?'repay_out':'repay_in',amt:a,from:out?PAY.acc:null,to:out?null:PAY.acc,person:PAY.name,cat:null,once:false,note:PAY.note.trim()||'سداد'};
     S.tx.push(x);
     const L=S.meta.last=S.meta.last||{};L[out?'repay_out_from':'repay_in_to']=PAY.acc;
     const name=PAY.name;
@@ -2346,7 +2350,8 @@ Object.assign(ACT,{
 });
 Object.assign(INP,{
   payAmt(el){const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;PAY.amt=v},
-  payNote(el){PAY.note=el.value}
+  payNote(el){PAY.note=el.value},
+  payDate(el){PAY.dt=dateInp(el)}
 });
 
 /* ---------- شحن كهرباء (شراء)، وتصحيح حساب الرصيد ---------- */
@@ -2395,6 +2400,12 @@ addSmsItems=function(auto){
   }
   touch({meta:true});
 };
+
+/* ---------- تاريخ التسجيل (لو مش النهارده: نفس اليوم المختار بالوقت الحالي) ---------- */
+function dIso(t){const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function tFromIso(v){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(v||'');if(!m||v===dIso(Date.now()))return Date.now();const n=new Date(),t=new Date(+m[1],+m[2]-1,+m[3],n.getHours(),n.getMinutes(),n.getSeconds()).getTime();return isFinite(t)?t:Date.now()}
+function dateFld(id,key,val){return '<div class="field"><label for="'+id+'">التاريخ</label><input type="date" id="'+id+'" value="'+(val||dIso(Date.now()))+'" data-in="'+key+'"></div>'}
+const dateInp=el=>/^\d{4}-\d{2}-\d{2}$/.test(el.value)?el.value:'';
 
 /* ---------- رسالة تفاصيل الحساب (واتساب) ---------- */
 /* اسم الحركة في كشف الحساب: لو الفلوس اتحوّلت من/لمحفظة (فودافون كاش) أو بنك نكتب ده بدل "سلف" */
