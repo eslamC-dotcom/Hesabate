@@ -1723,12 +1723,13 @@ function renderOp(){
     +'<div class="field"><span class="lbl2">'+(out?'بيطلع من حساب':'بيدخل في حساب')+'</span><div class="chips">'+chips+'</div>'
     +'<div class="card" id="oFlow" style="margin-top:6px;text-align:center;font-weight:600"></div></div>'
     +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div style="font-size:13px;color:var(--muted);margin-top:4px">ممكن يكون رقم أي حد. الحساب بيتسجّل على '+esc(OS.name)+' والرسالة بتروح لواتساب بتاعه.</div><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
-    +(out?'<div class="field"><label for="oFee">رسوم العملية (اختياري)</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
+    +(out&&['wallet','bank'].indexOf((accById(OS.acc)||{}).kind)>=0?'<div class="field"><label for="oFee">رسوم العملية (اختياري، بتتضاف على حساب '+esc(OS.name)+')</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
+    +'<div class="lbl2" style="margin-top:14px">تفاصيل الحركة</div>'
     +dateFld('oDate','oDate',OS.dt)
     +'<div class="field"><label for="oNote">ملاحظة (اختياري، بتظهر في الرسالة)</label><input type="text" id="oNote" autocomplete="off" value="'+esc(OS.note)+'" data-in="oNote" placeholder="مثلًا: ثمن بضاعة"></div>'
-    +'<div class="field"><label for="oLine">صياغة الرسالة (غيّرها وهفتكرها المرة الجاية)</label><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine"></div>'
-    +'<div class="lbl2">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
-    +'<div class="btns">'+btn('oSave','سجّل وجهّز الرسالة','primary')+(o.ussd?btn('oDial','افتح الاتصال بالكود'):'')+'</div>',()=>openPerson(OS.name,OS.pb));
+    +'<div class="lbl2" style="margin-top:14px">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
+    +'<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--muted);font-size:14px">تعديل صياغة الرسالة (هفتكرها المرة الجاية)</summary><div class="field"><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine" aria-label="صياغة الرسالة"></div></details>'
+    +'<div class="btns" style="position:sticky;bottom:0;background:var(--sheet);padding:10px 0 4px">'+btn('oSave','سجّل وجهّز الرسالة','primary')+(o.ussd?btn('oDial','افتح الاتصال بالكود'):'')+'</div>',()=>openPerson(OS.name,OS.pb));
   opUpdate();
   setTimeout(()=>{const a=$('#oAmt');if(a)a.focus()},60);
 }
@@ -1737,7 +1738,7 @@ function opSave(){
   if(!(amt>0)){toast('اكتب المبلغ الأول');return}
   const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=tFromIso(OS.dt),out=opOut(o);
   const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:(OS.note||'').trim()||o.l,op:o.k};
-  const txs=[x],fee=out?parseNum(OS.fee):NaN;
+  const txs=[x],fee=out&&['wallet','bank'].indexOf((accById(OS.acc)||{}).kind)>=0?parseNum(OS.fee):NaN;
   const onP=fee>0&&o.t==='lend';
   if(fee>0)txs.push({id:gid(),t:now,type:onP?'lend':'exp',amt:r2(fee),from:OS.acc,to:null,person:onP?name:null,cat:onP?null:'رسوم',once:false,note:'رسوم '+o.l,feeOf:x.id});
   /* رقم التحويل ممكن يكون لأي حد: مابنغيّرش رقم واتساب الشخص المحفوظ بيه */
