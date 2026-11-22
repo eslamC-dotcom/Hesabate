@@ -20,6 +20,9 @@ def sc(pg):
     OUT['long'] = msg([tx(D(1 + i), 'lend', 10, i) for i in range(14)])
     # 4) حساب خالص
     OUT['paid'] = msg([tx(D(1), 'lend', 100, 1), tx(D(2), 'repay_in', 100, 2)])
+    # 6) الملاحظات: بتاعة المستخدم بس
+    n = lambda i, note, **k: dict(tx(D(20 + i), 'lend', 10, 50 + i), note=note, **k)
+    OUT['notes'] = msg([n(0, 'ثمن بضاعة'), n(1, 'سداد'), n(2, 'نور · 01055556666'), n(3, 'وارد · Hamouda', src='sms'), n(4, 'رسوم تحويل فودافون كاش'), n(5, 'رقم ٠١٠٥٥٥٥٦٦٦٦')])
     # 5) مفيش حركات
     OUT['none'] = msg([])
 pg_wait=1
@@ -32,6 +35,8 @@ if '100 ج' in z or '📅 01/11' in z or '📅 1/11' in z: BAD.append('zero: ل�
 if '💰 الرصيد: 50 ج' not in z: BAD.append('zero: الرصيد بعد الصفر غلط: ' + z)
 if l.count('💰 الرصيد') != 10 or 'رصيد سابق: عليك 40 ج' not in l or 'الرصيد المتبقي: 140 جنيه' not in l: BAD.append('long: آخر 10 حركات غلط: ' + l)
 if 'حسابنا خالص' not in p or p.count('💰 الرصيد') != 2: BAD.append('paid: الحساب الخالص غلط: ' + p)
+nt = OUT['notes']
+if '📝 ثمن بضاعة' not in nt or nt.count('📝') != 1: BAD.append('notes: الملاحظات غلط (لازم ملاحظة المستخدم بس): ' + nt)
 if OUT['none'].count('لسه مفيش حركات') != 1: BAD.append('none: ' + OUT['none'])
 if os.environ.get('SHOW'): print(u, '\n=====\n', z, '\n=====\n', l, '\n=====\n', p)
 print('\n'.join(BAD) if BAD else 'OK: شكل الكشف تمام')

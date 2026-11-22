@@ -1703,7 +1703,7 @@ function opMsg(){
   const a=parseNum(OS.amt),prev=opPrevBal();
   const line=(OS.line||'').trim()||opLine();
   if(!(a>0))return line;
-  return stmtMsg(OS.name,line,[{type:OS.o.t,amt:a,op:OS.o.k,t:tFromIso(OS.dt),person:OS.name}]);
+  return stmtMsg(OS.name,line,[{type:OS.o.t,amt:a,op:OS.o.k,t:tFromIso(OS.dt),person:OS.name,note:(OS.note||'').trim()}]);
 }
 function opUpdate(){
   const pv=$('#oPrev');if(pv)pv.textContent=opMsg();
@@ -1712,7 +1712,7 @@ function opUpdate(){
 }
 function newOp(name,k){
   const o=opBy(k),c=contactFor(name);
-  OS={pb:curPB,name:name,o:o,amt:'',acc:opDefAcc(o),fee:'',num:(c&&c.p)||'',edited:false,line:'',dt:''};
+  OS={pb:curPB,name:name,o:o,amt:'',acc:opDefAcc(o),fee:'',num:(c&&c.p)||'',edited:false,line:'',dt:'',note:''};
   OS.line=opLine();renderOp();
 }
 function renderOp(){
@@ -1725,6 +1725,7 @@ function renderOp(){
     +(o.ussd?'<div class="field"><label for="oNum">رقم فودافون كاش للمستلم</label><input type="text" id="oNum" dir="ltr" inputmode="tel" autocomplete="off" placeholder="01XXXXXXXXX" value="'+esc(OS.num)+'" data-in="oNum"><div style="font-size:13px;color:var(--muted);margin-top:4px">ممكن يكون رقم أي حد. الحساب بيتسجّل على '+esc(OS.name)+' والرسالة بتروح لواتساب بتاعه.</div><div class="card" dir="ltr" id="oCode" style="margin-top:6px;text-align:center;font-weight:700;unicode-bidi:isolate"></div></div>':'')
     +(out?'<div class="field"><label for="oFee">رسوم العملية (اختياري)</label><input type="text" id="oFee" inputmode="decimal" autocomplete="off" placeholder="0" value="'+esc(OS.fee)+'" data-in="oFee"></div>':'')
     +dateFld('oDate','oDate',OS.dt)
+    +'<div class="field"><label for="oNote">ملاحظة (اختياري، بتظهر في الرسالة)</label><input type="text" id="oNote" autocomplete="off" value="'+esc(OS.note)+'" data-in="oNote" placeholder="مثلًا: ثمن بضاعة"></div>'
     +'<div class="field"><label for="oLine">صياغة الرسالة (غيّرها وهفتكرها المرة الجاية)</label><input type="text" id="oLine" value="'+esc(OS.line)+'" data-in="oLine"></div>'
     +'<div class="lbl2">الرسالة اللي هتتبعت</div><div class="sms" style="margin-top:6px"><div id="oPrev" style="white-space:pre-wrap"></div></div>'
     +'<div class="btns">'+btn('oSave','سجّل وجهّز الرسالة','primary')+(o.ussd?btn('oDial','افتح الاتصال بالكود'):'')+'</div>',()=>openPerson(OS.name,OS.pb));
@@ -1735,7 +1736,7 @@ function opSave(){
   const amt=r2(parseNum(OS.amt));
   if(!(amt>0)){toast('اكتب المبلغ الأول');return}
   const o=OS.o,name=OS.name,T=TYPES[o.t],prev=opPrevBal(),now=tFromIso(OS.dt),out=opOut(o);
-  const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:o.l,op:o.k};
+  const x={id:gid(),t:now,type:o.t,amt:amt,from:out?OS.acc:null,to:out?null:OS.acc,person:name,cat:null,once:false,note:(OS.note||'').trim()||o.l,op:o.k};
   const txs=[x],fee=out?parseNum(OS.fee):NaN;
   const onP=fee>0&&o.t==='lend';
   if(fee>0)txs.push({id:gid(),t:now,type:onP?'lend':'exp',amt:r2(fee),from:OS.acc,to:null,person:onP?name:null,cat:onP?null:'رسوم',once:false,note:'رسوم '+o.l,feeOf:x.id});
@@ -1797,6 +1798,7 @@ Object.assign(ACT,{
 });
 Object.assign(INP,{
   oDate(el){OS.dt=dateInp(el);opUpdate()},
+  oNote(el){OS.note=el.value;opUpdate()},
   oAmt(el){
     const v=normDigits(el.value).replace(/[^\d.,]/g,'');if(v!==el.value)el.value=v;OS.amt=v;
     if(!OS.edited){OS.line=opLine();const l=$('#oLine');if(l)l.value=OS.line}
@@ -2420,6 +2422,14 @@ function stmtLbl(x,def){
   if(!via)return def;
   return (out?'تحويل ':'سداد ')+via;
 }
+/* الملاحظة اللي كتبها المستخدم بس: من غير الملاحظات التلقائية، ومن غير أي رقم تليفون أو حاجة جاية من رسائل البنك */
+function stmtNote(x,lbl){
+  const n=(x.note||'').trim();
+  if(!n||x.src==='sms')return '';
+  if(/^(رسوم|سداد|تسوية)/.test(n)||n===lbl||n===(x.op&&opBy(x.op)||{}).l)return '';
+  if(/(?:\+?20)?0?1[0125]\d{8}/.test(n.replace(/[٠-٩]/g,d=>'٠١٢٣٤٥٦٧٨٩'.indexOf(d))))return '';
+  return n;
+}
 function stmtMsg(name,head,extra){
   const all0=S.tx.filter(x=>x.person===name&&TYPES[x.type]&&TYPES[x.type].debt).concat(extra||[]).sort((a,b)=>a.t-b.t);
   /* رسوم التحويل بتتدمج في سطر التحويل نفسه (المجموع زي ما هو) */
@@ -2453,7 +2463,10 @@ function stmtMsg(name,head,extra){
     L.push('📅 '+g.d,'');
     g.items.forEach(it=>{
       const x=it.x,o=x.op&&opBy(x.op),lbl=o?o.l:stmtLbl(x,W[x.type]),up=sg(x)===pos;
-      L.push((up?(it.first?'🔹':'➕'):'➖')+' '+lbl+': '+fmt(x.amt)+' ج','💰 الرصيد: '+fmt(it.bal)+' ج','');
+      const nt=stmtNote(x,lbl);
+      L.push((up?(it.first?'🔹':'➕'):'➖')+' '+lbl+': '+fmt(x.amt)+' ج');
+      if(nt)L.push('📝 '+nt);
+      L.push('💰 الرصيد: '+fmt(it.bal)+' ج','');
     });
     L.push(LN);if(gi<groups.length-1)L.push('');
   });

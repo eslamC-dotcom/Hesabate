@@ -16,10 +16,11 @@ def sc(pg):
     pg.fill('#apName', 'نور'); pg.fill('#apNum', '01099998888'); pg.click('[data-act="apSave"]'); pg.wait_for_timeout(400)
     # أديته: تاريخ قديم
     pg.click('[data-act="opStart"][data-k="lend_vcash"]'); pg.wait_for_timeout(300)
-    pg.fill('#oAmt', '100'); pg.fill('#oNum', '01055556666'); pg.fill('#oDate', '2026-01-05'); pg.wait_for_timeout(200)
+    pg.fill('#oAmt', '100'); pg.fill('#oNum', '01055556666'); pg.fill('#oDate', '2026-01-05'); pg.fill('#oNote', 'ثمن بضاعة'); pg.wait_for_timeout(200)
     if SH: pg.screenshot(path=SH + '/date_op.png', full_page=True)
     pg.click('[data-act="oSave"]'); pg.wait_for_timeout(400)
     m = pg.input_value('#waMsg')
+    if '📝 ثمن بضاعة' not in m: BAD.append('op: الملاحظة مش ظاهرة في الرسالة: ' + m)
     if '📅 5/1' not in m: BAD.append('op: التاريخ القديم مش ظاهر في الكشف: ' + m)
     close_all(pg)
     # سداد سريع بتاريخ قديم
