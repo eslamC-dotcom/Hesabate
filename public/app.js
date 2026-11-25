@@ -2168,7 +2168,7 @@ smsItemHtml=function(it,i,auto){
   if(T.person){
     const P=peopleAll().sort((a,b)=>b.last-a.last).slice(0,6);
     h+='<div class="field sgap"><span class="lbl2">مين الشخص؟</span>'+(P.length?'<div class="chips">'+P.map(p=>'<button class="chip sm'+(p.name===it.person?' on':'')+'" data-act="smsPersonPick" data-i="'+i+'"'+AU+' data-p="'+esc(encodeURIComponent(p.name))+'">'+esc(p.name)+'</button>').join('')+'</div>':'')
-      +'<input type="text" id="smsPerson'+i+(auto?'a':'')+'" data-in="smsPerson" data-i="'+i+'"'+AU+' value="'+esc(it.person)+'" placeholder="اسم الشخص" autocomplete="off"></div>';
+      +'<input type="text" id="smsPerson'+i+(auto?'a':'')+'" data-in="smsPerson" data-i="'+i+'"'+AU+' value="'+esc(it.person)+'" placeholder="اسم الشخص (اكتب جزء من الاسم يظهر لك المحفوظ)" autocomplete="off"><div id="smsSug'+i+(auto?'a':'')+'">'+smsSug(it,i,AU)+'</div></div>';
   }
   h+='<div class="field sgap" style="margin-block:10px 4px"><label for="smsNote'+i+(auto?'a':'')+'">ملاحظة</label><input type="text" id="smsNote'+i+(auto?'a':'')+'" data-in="smsNote" data-i="'+i+'"'+AU+' value="'+esc(it.note)+'"></div>';
   if(it.fee>0&&T.from)h+='<div class="lbl2">+ رسوم خدمة '+N(fmt(it.fee))+' ج.م هتتسجّل لوحدها</div>';
@@ -2183,13 +2183,22 @@ ACT.smsQuick=function(el){
   else{if(it.op){it.op=null;it.note=(it.dir==='in'?'وارد':'صادر')+(it.num?' · '+it.num:'')}setItemType(it,t)}
   render();
 };
+/* بحث في كل الأسماء (مش بس آخر 6): بيتحدّث وإنت بتكتب، من غير ما الصفحة تتعاد */
+const arKey=t=>String(t||'').toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/\s+/g,' ').trim();
+function smsSug(it,i,AU){
+  const q=(it.person||'').trim();if(!q)return '';
+  const k=arKey(q),P=peopleAll(),exact=P.some(p=>p.name===q);
+  const m=P.filter(p=>p.name!==q&&arKey(p.name).indexOf(k)>=0).sort((a,b)=>b.last-a.last).slice(0,8);
+  return (m.length?'<div class="chips" style="margin-top:6px">'+m.map(p=>'<button class="chip sm" data-act="smsPersonPick" data-i="'+i+'"'+AU+' data-p="'+esc(encodeURIComponent(p.name))+'">'+esc(p.name)+'</button>').join('')+'</div>':'')
+    +(exact?'':'<div style="font-size:13px;color:var(--muted);margin-top:4px">'+(m.length?'لو مش واحد منهم، ':'مفيش اسم محفوظ بالشكل ده، ')+'هيتسجّل شخص جديد باسم «'+esc(q)+'»</div>');
+}
 ACT.smsPersonPick=function(el){const it=SL(el)[+el.dataset.i];if(!it)return;it.person=decodeURIComponent(el.dataset.p);render()};
 Object.assign(INP,{
   smsOn(el){SL(el)[+el.dataset.i].on=el.checked},
   smsType(el){const it=SL(el)[+el.dataset.i];setItemType(it,el.value);render()},
   smsAcc(el){const it=SL(el)[+el.dataset.i],T=TYPES[it.type];it.acc=el.value;if(!(T.from&&T.to)||it.dir!=='in')it.sacc=el.value},
   smsAcc2(el){const it=SL(el)[+el.dataset.i];it.acc2=el.value;if(it.dir==='in')it.sacc=el.value},
-  smsPerson(el){SL(el)[+el.dataset.i].person=el.value},
+  smsPerson(el){const it=SL(el)[+el.dataset.i];if(it.person===el.value)return;it.person=el.value;const b=document.getElementById('smsSug'+el.dataset.i+(el.dataset.auto?'a':''));if(b)b.innerHTML=smsSug(it,el.dataset.i,el.dataset.auto?' data-auto="1"':'')},
   smsNote(el){SL(el)[+el.dataset.i].note=el.value}
 });
 
